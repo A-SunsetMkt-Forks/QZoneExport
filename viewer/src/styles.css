@@ -1,0 +1,521 @@
+/**
+ * 查看器全局样式
+ * 必须完全离线：不引入任何 CDN 字体与图标，字体一律用系统字体栈。
+ * 颜色由 CSS 自定义属性驱动，支持亮色 / 暗色双模切换。
+ */
+
+/* ===== CSS 自定义属性（亮色默认值） ===== */
+:root {
+    --bg-primary: #fff;
+    --bg-page: #f5f5f8;
+    --bg-toolbar: #fafafc;
+    --bg-chat: #f0f6ff;
+    /* 带色彩倾向的面板底色 */
+    --bg-tint-blue: #ecf5ff;
+    --bg-tint-green: #f0faf4;
+    --bg-tint-yellow: #fff7e6;
+    --bg-tint-red: #fef0f0;
+    --bg-tint-purple: #f6f4fb;
+
+    --text-primary: #333;
+    --text-secondary: #666;
+    --text-muted: #999;
+    --text-subtle: #bbb;
+
+    --border-card: #ebedf0;
+    --border-light: #efeff5;
+    --border-toolbar: #f0f0f4;
+    --border-separator: #e6e6ec;
+    --border-chat: #d8e6f7;
+    --border-hover: #d9dde3;
+    --border-dashed: #d9d9d9;
+
+    --accent: #2080f0;
+    --accent-hover: #409eff;
+    --accent-pressed: #1366d6;
+
+    --shadow-sm: rgba(0, 0, 0, 0.04);
+    --shadow-md: rgba(0, 0, 0, 0.08);
+    --shadow-lg: rgba(0, 0, 0, 0.2);
+
+    --pswp-bg: rgba(20, 20, 24, 0.86);
+    --pswp-border: rgba(255, 255, 255, 0.12);
+    --pswp-text: #ddd;
+    --pswp-muted: #888;
+    --pswp-label: #777;
+    --pswp-value: #aaa;
+    --pswp-highlight: #7cc4ff;
+}
+
+/* ===== 暗色模式 ===== */
+:root.dark {
+    --bg-primary: #1e1e22;
+    --bg-page: #16161a;
+    --bg-toolbar: #222228;
+    --bg-chat: #1a2640;
+    --bg-tint-blue: #1a2a40;
+    --bg-tint-green: #1a2820;
+    --bg-tint-yellow: #282418;
+    --bg-tint-red: #281a1a;
+    --bg-tint-purple: #201a2a;
+
+    --text-primary: #e4e4e7;
+    --text-secondary: #a0a0a8;
+    --text-muted: #787880;
+    --text-subtle: #585860;
+
+    --border-card: #2e2e36;
+    --border-light: #2a2a32;
+    --border-toolbar: #2a2a34;
+    --border-separator: #333340;
+    --border-chat: #2a3a58;
+    --border-hover: #3a3a46;
+    --border-dashed: #3a3a46;
+
+    --accent: #409eff;
+    --accent-hover: #66b1ff;
+    --accent-pressed: #337ecc;
+
+    --shadow-sm: rgba(0, 0, 0, 0.3);
+    --shadow-md: rgba(0, 0, 0, 0.5);
+    --shadow-lg: rgba(0, 0, 0, 0.6);
+
+    /* PhotoSwipe 在暗色模式下保持深色底 */
+    --pswp-bg: rgba(12, 12, 16, 0.92);
+    --pswp-border: rgba(255, 255, 255, 0.1);
+    --pswp-text: #ccc;
+    --pswp-muted: #777;
+    --pswp-label: #666;
+    --pswp-value: #999;
+    --pswp-highlight: #66b8ff;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: var(--bg-page);
+    overflow-x: hidden;
+    max-width: 100vw;
+}
+
+#app {
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+/* 页面标题：固定在滚动区之外（与设置页同一套三段式结构） */
+.page-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    padding: 14px 28px 12px;
+    font-size: 18px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-light);
+    min-width: 0;
+    color: var(--text-primary);
+}
+
+/* 可滚动的正文区；flex 列布局使「暂无数据/未找到」提示能占满剩余高度并上下居中 */
+.page-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px 28px 20px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+}
+
+/*
+ * 列表工具栏（各模块共用）
+ */
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: var(--bg-toolbar);
+    border: 1px solid var(--border-toolbar);
+    border-radius: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    box-shadow: 0 2px 6px var(--shadow-sm);
+}
+
+/* 一组相关控件（如多个筛选下拉） */
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* 组前的分隔线 */
+.toolbar-group + .toolbar-group::before {
+    content: '';
+    width: 1px;
+    height: 18px;
+    margin-right: 4px;
+    background: var(--border-separator);
+}
+
+/* 靠右的组（排序与搜索） */
+.toolbar-group.to-right {
+    margin-left: auto;
+}
+
+.toolbar-group.to-right::before {
+    display: none;
+}
+
+/* 控件前的小标题 */
+.toolbar-label {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* 列表条目卡片 */
+.card-item {
+    position: relative;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-card);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px var(--shadow-sm);
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.card-item:hover {
+    border-color: var(--border-hover);
+    box-shadow: 0 3px 10px var(--shadow-md);
+}
+
+.card-item:last-child {
+    margin-bottom: 0;
+}
+
+/* 统计角标 */
+.stat-badges {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.stat-badges .stat-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.stat-badges .stat-item.has-value {
+    color: var(--accent);
+}
+
+/* 话题：#话题 不跳转，仅用超链接色区分（与富文本 formatTopic 配套） */
+.topic {
+    color: var(--accent);
+}
+
+/* 发起 QQ 聊天的链接 */
+.chat-link {
+    display: inline-block;
+    padding: 1px 8px;
+    border: 1px solid var(--border-chat);
+    border-radius: 10px;
+    background: var(--bg-chat);
+    color: var(--accent);
+    font-size: 12px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.chat-link:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+/* 叠在图片上的统计条 */
+.media-stats {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 6px;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
+    color: #fff;
+    font-size: 12px;
+    pointer-events: none;
+}
+
+.media-stats .stat-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+/* 内容里的表情图片 */
+.emoticon {
+    width: 22px;
+    height: 22px;
+    vertical-align: text-bottom;
+}
+
+/*
+ * PhotoSwipe 评论面板（全局，Body 层级）
+ */
+.pswp-comments {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+    width: 300px;
+    padding: 48px 16px 16px;
+    overflow: auto;
+    box-sizing: border-box;
+    background: var(--pswp-bg);
+    border-left: 1px solid var(--pswp-border);
+    color: var(--pswp-text);
+    font-size: 13px;
+}
+
+.pswp--with-comments .pswp__top-bar {
+    right: 300px;
+    width: auto;
+    left: 0;
+}
+
+.pswp--with-comments .pswp__button--arrow--next {
+    right: 300px;
+}
+
+/* PhotoSwipe 弹窗视频 */
+.pswp-video {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.pswp-video video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+    outline: none;
+}
+
+/* 视频激活时底部留白，避免被缩略图条遮挡 */
+.pswp--video-active .pswp-video {
+    box-sizing: border-box;
+    padding-bottom: 80px;
+}
+
+.pswp-comments-title {
+    margin-bottom: 10px;
+    color: #fff;
+    font-weight: 600;
+}
+
+.pswp-media-info {
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--pswp-border);
+}
+
+.pswp-media-name {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.pswp-media-desc {
+    margin-top: 4px;
+    color: #ccc;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+.pswp-media-meta {
+    margin-top: 8px;
+}
+
+.pswp-media-row {
+    display: flex;
+    gap: 8px;
+    line-height: 1.8;
+    font-size: 12px;
+}
+
+.pswp-media-label {
+    flex: none;
+    width: 60px;
+    color: var(--pswp-label);
+}
+
+.pswp-media-value {
+    color: var(--pswp-value);
+    word-break: break-word;
+}
+
+.pswp-comments-empty {
+    color: var(--pswp-muted);
+}
+
+.pswp-comment {
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--pswp-border);
+}
+
+.pswp-comment-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pswp-comment-name {
+    color: var(--pswp-highlight);
+}
+
+.pswp-comment-time {
+    color: var(--pswp-label);
+    font-size: 12px;
+}
+
+.pswp-comment-text {
+    margin-top: 2px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+@media (max-width: 900px) {
+    .pswp-comments {
+        display: none;
+    }
+}
+
+/* 底部缩略图条 */
+.pswp-thumbnails {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 6;
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7) 30%);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.3) transparent;
+}
+
+.pswp--with-comments .pswp-thumbnails {
+    right: 300px;
+}
+
+.pswp-thumb {
+    flex: none;
+    width: 56px;
+    height: 56px;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    opacity: 0.55;
+    border: 2px solid transparent;
+    transition: opacity 0.2s, border-color 0.2s;
+    background: #222;
+}
+
+.pswp-thumb:hover {
+    opacity: 0.85;
+}
+
+.pswp-thumb.active {
+    opacity: 1;
+    border-color: var(--accent);
+}
+
+.pswp-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.pswp-thumb--video {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-size: 16px;
+}
+
+@media (max-width: 900px) {
+    .pswp-thumbnails {
+        right: 0;
+    }
+}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+    .page-head {
+        padding: 12px 14px 10px;
+        font-size: 16px;
+    }
+
+    .page-body {
+        padding: 12px 14px 16px;
+    }
+
+    .card-item {
+        padding: 10px 12px;
+    }
+
+    .list-toolbar {
+        gap: 8px;
+        padding: 8px 10px;
+    }
+
+    .list-toolbar .toolbar-group {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .list-toolbar .toolbar-group > :not(.toolbar-label) {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .list-toolbar .toolbar-group.to-right {
+        margin-left: 0;
+    }
+
+    .list-toolbar .toolbar-group + .toolbar-group::before {
+        display: none;
+    }
+}

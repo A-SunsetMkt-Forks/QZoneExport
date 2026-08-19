@@ -1,0 +1,416 @@
+<script lang="ts">
+/** 排序字段定义：调用方按需声明可排序的字段 */
+export interface SortOption {
+    /** 显示名，如「修改时间」「点赞数」 */
+    label: string;
+    /** 唯一 key */
+    value: string;
+    /** 排序取值（时间字段建议用 timeValue 归一，数量字段直接用数字） */
+    valueOf: (item: Record<string, any>) => number;
+}
+</script>
+
+<script setup lang="ts">
+import { computed, nextTick, ref, watch } from 'vue';
+import { NEmpty, NInput, NPagination, NRadioButton, NRadioGroup, NSelect, NSpin } from 'naive-ui';
+import { formatTime, timeValue } from '../data/format';
+import { getModulePref, savePref } from '../data/displayPrefs';
+
+/**
+ * 列表页外壳
+ * 各模块列表页的结构一致（标题 + 计数 + 年份/月份筛选 + 搜索 + 排序 + 分页），抽出来避免逐页重复；
+ * 模块特有的筛选（如日志分类、收藏类型）由调用方把控件放进 toolbar 插槽、并传一个 filter 谓词；
+ * 条目本身的渲染由调用方通过默认插槽提供。
+ */
+const props = withDefaults(defineProps<{
+    title: string;
+    items: Record<string, any>[];
+    loading: boolean;
+    /** 数据文件缺失时的提示（该模块未备份） */
+    emptyHint: string;
+    /** 取条目时间的字段，用于年/月筛选与排序；不传则两者都不显示 */
+    timeOf?: (item: Record<string, any>) => number | string | undefined;
+    /** 取条目可搜索文本；不传则不显示搜索框 */
+    textOf?: (item: Record<string, any>) => string;
+    /** 模块特有的额外筛选条件 */
+    filter?: (item: Record<string, any>) => boolean;
+    /**
+     * 置顶判定（如日志的 effect 位 4）：置顶条目不受自定义排序控制，始终排在最前；
+     * 同为置顶的按 timeOf 时间倒序。不传则无置顶逻辑。
+     */
+    topOf?: (item: Record<string, any>) => boolean;
+    /** 排序下拉的时间叫法，如「发表时间」「收藏时间」（未传 sorts 时用于时间排序） */
+    sortLabel?: string;
+    /**
+     * 可排序字段清单；不传则按 timeOf 做时间排序（兼容旧用法）。
+     * 传了之后排序区显示「字段 + 升降序」两个下拉。
+     */
+    sorts?: SortOption[];
+    pageSize?: number;
+    /** 单位量词，如「条」「个」 */
+    unit?: string;
+    /**
+     * 是否分页
+     * 缩略图网格（如视频、相片）一屏能摆很多项，分页反而碎，此时关掉。
+     */
+    paginate?: boolean;
+    /**
+     * 展示偏好键：传入后，分页/瀑布流状态将按模块记忆在 localStorage，
+     * 并在工具栏显示「分页 / 瀑布流」切换；不传则使用 paginate prop 默认值且不持久化。
+     */
+    prefKey?: string;
+}>(), {
+    pageSize: 20,
+    unit: '条',
+    sortLabel: '时间',
+    paginate: true,
+});
+
+const keyword = ref('');
+/** 分页/瀑布流：传入 prefKey 时从 localStorage 读偏好，否则用 prop 默认 */
+const paginate = ref(props.paginate);
+if (props.prefKey) {
+    paginate.value = getModulePref(props.prefKey).paginate;
+}
+/**
+ * 布局切换的「用户意图」：工具栏单选直接绑它，而非直接绑 paginate。
+ * 切到瀑布流时先把遮罩（含文案）同步点亮，再延到下一帧执行繁重的瀑布流 DOM 重建，
+ * 避免「先卡顿、遮罩才出来」；切回分页是轻量操作，直接落。
+ */
+const layoutMode = ref(paginate.value);
+const masonryBusy = ref(false);
+// 仅负责隐藏：paginate 才是真正驱动渲染的状态，瀑布流首帧渲染完成后撤掉遮罩
+watch(paginate, (value) => {
+    if (value === false) {
+        nextTick().then(() => {
+            requestAnimationFrame(() => requestAnimationFrame(() => { masonryBusy.value = false; }));
+        });
+    } else {
+        masonryBusy.value = false;
+    }
+});
+watch(layoutMode, (val) => {
+    if (props.prefKey) {
+        savePref(props.prefKey, { paginate: val });
+    }
+    if (val === false) {
+        // 立即点亮遮罩（同步设 true，本次刷新只多一个轻量节点，浏览器可立即绘制出遮罩与文案）
+        masonryBusy.value = true;
+        // 等遮罩绘制完再重建瀑布流 DOM，把卡顿挡在遮罩之后
+        nextTick().then(() => {
+            requestAnimationFrame(() => requestAnimationFrame(() => { paginate.value = false; }));
+        });
+    } else {
+        masonryBusy.value = false;
+        paginate.value = true;
+    }
+});
+/** 年与月分开筛（空串表示不限）：先选年再选月，比一个「yyyy年MM月」长列表好翻 */
+const year = ref('');
+const monthNum = ref('');
+const page = ref(1);
+
+/** 取条目的年份、月份（两位），取不到时为空串 */
+function yearOf(item: Record<string, any>): string {
+    return props.timeOf ? formatTime(props.timeOf(item)).slice(0, 4) : '';
+}
+function monthOfItem(item: Record<string, any>): string {
+    return props.timeOf ? formatTime(props.timeOf(item)).slice(5, 7) : '';
+}
+
+/** 年份选项：取自数据里实际出现的年份（降序），无数据的年份不列出来 */
+const yearOptions = computed(() => {
+    if (!props.timeOf) {
+        return [];
+    }
+    const years = new Set<string>();
+    for (const item of props.items) {
+        const value = yearOf(item);
+        if (value) {
+            years.add(value);
+        }
+    }
+    return [{ label: '全部年份', value: '' }]
+        .concat([...years].sort().reverse().map((value) => ({ label: value + ' 年', value })));
+});
+
+/** 月份选项：只列出当前年份（未选年则全部）实际有数据的月份 */
+const monthOptions = computed(() => {
+    if (!props.timeOf) {
+        return [];
+    }
+    const months = new Set<string>();
+    for (const item of props.items) {
+        if (year.value && yearOf(item) !== year.value) {
+            continue;
+        }
+        const value = monthOfItem(item);
+        if (value) {
+            months.add(value);
+        }
+    }
+    return [{ label: '全部月份', value: '' }]
+        .concat([...months].sort().map((value) => ({ label: Number(value) + ' 月', value })));
+});
+
+const filtered = computed(() => props.items.filter((item) => {
+    if (props.filter && !props.filter(item)) {
+        return false;
+    }
+    if (props.timeOf) {
+        if (year.value && yearOf(item) !== year.value) {
+            return false;
+        }
+        if (monthNum.value && monthOfItem(item) !== monthNum.value) {
+            return false;
+        }
+    }
+    const word = keyword.value.trim().toLowerCase();
+    if (!word || !props.textOf) {
+        return true;
+    }
+    return (props.textOf(item) || '').toLowerCase().includes(word);
+}));
+
+/**
+ * 排序：支持多字段 + 升降序（凡排序皆可正反向）。
+ * 未传 sorts 时退回按 timeOf 时间排序，保持旧页面行为不变。
+ */
+const sortDir = ref<'desc' | 'asc'>(props.prefKey ? getModulePref(props.prefKey).sortDir : 'desc');
+const sortField = ref(props.prefKey ? getModulePref(props.prefKey).sortField : '');
+
+/** 实际生效的排序字段清单：优先用调用方的 sorts，否则由 timeOf 兜底出一个时间项 */
+const effectiveSorts = computed<SortOption[]>(() => {
+    if (props.sorts && props.sorts.length > 0) {
+        return props.sorts;
+    }
+    if (props.timeOf) {
+        const timeOf = props.timeOf;
+        return [{ label: props.sortLabel, value: '__time__', valueOf: (item) => timeValue(timeOf(item)) }];
+    }
+    return [];
+});
+
+// 默认选中第一个排序字段
+watch(effectiveSorts, (sorts) => {
+    if (sorts.length > 0 && !sortField.value) {
+        sortField.value = sorts[0]!.value;
+    }
+}, { immediate: true });
+
+// 排序字段/方向变更后按模块持久化（与相册列表一致的排序记忆；仅在传入 prefKey 时生效）
+watch(sortField, (v) => { if (props.prefKey) savePref(props.prefKey, { sortField: v }); });
+watch(sortDir, (v) => { if (props.prefKey) savePref(props.prefKey, { sortDir: v }); });
+
+const activeSort = computed(() => (
+    effectiveSorts.value.find((s) => s.value === sortField.value) || effectiveSorts.value[0]
+));
+
+const sorted = computed(() => {
+    const valueOf = activeSort.value?.valueOf;
+    if (!valueOf) {
+        return filtered.value;
+    }
+    // 不能直接排 filtered（那是 computed 的结果数组，sort 会原地修改它）
+    return [...filtered.value].sort((a, b) => {
+        // 置顶优先：置顶条目不受自定义排序控制，始终排在最前；同为置顶按时间倒序
+        if (props.topOf) {
+            const topA = props.topOf(a) ? 1 : 0;
+            const topB = props.topOf(b) ? 1 : 0;
+            if (topA !== topB) {
+                return topB - topA;
+            }
+            if (topA === 1 && props.timeOf) {
+                return timeValue(props.timeOf(b)) - timeValue(props.timeOf(a));
+            }
+        }
+        const diff = valueOf(a) - valueOf(b);
+        return sortDir.value === 'desc' ? -diff : diff;
+    });
+});
+
+const dirOptions = [
+    { label: '降序', value: 'desc' },
+    { label: '升序', value: 'asc' },
+];
+
+const paged = computed(() => (paginate.value
+    ? sorted.value.slice((page.value - 1) * props.pageSize, page.value * props.pageSize)
+    : sorted.value));
+
+// 筛选与排序变化后回到第一页，否则可能停在一个已不存在的页码上
+watch([keyword, year, monthNum, sortDir, sortField, () => props.filter], () => {
+    page.value = 1;
+});
+// 每页条数变化（如媒体网格随屏宽调整列数）时，把超出新页数的页码钳回最后一页，避免显示空页
+watch(() => props.pageSize, () => {
+    const maxPage = Math.max(1, Math.ceil(filtered.value.length / props.pageSize));
+    if (page.value > maxPage) {
+        page.value = maxPage;
+    }
+});
+// 切年份时清掉月份：旧月份在新年份里可能无数据，留着会让列表突然空掉
+watch(year, () => {
+    monthNum.value = '';
+});
+// 切页后回到顶部，长列表下翻页不至于停在页面底部
+watch(page, () => {
+    document.querySelector('.page-body')?.scrollTo({ top: 0 });
+});
+</script>
+
+<template>
+    <div class="page-head">
+        <!-- 标题前置内容（如详情页的返回按钮） -->
+        <slot name="head-prefix" />
+        {{ props.title }}
+        <span v-if="!props.loading && props.items.length > 0" class="head-count">
+            共 {{ props.items.length }} {{ props.unit }}{{
+                filtered.length !== props.items.length ? `，筛选出 ${filtered.length} ${props.unit}` : ''
+            }}
+        </span>
+    </div>
+
+    <div class="page-body">
+        <!-- 列表之前的固定内容（如留言页的主人寄语），不参与筛选与分页 -->
+        <slot name="lead" />
+
+        <div v-if="props.loading" class="list-loading">
+            <n-spin size="large" />
+        </div>
+
+        <!-- 该模块无数据（未备份或本来就空）：居中的“暂无数据”占位，而非告警条 -->
+        <n-empty
+            v-else-if="props.items.length === 0"
+            :description="props.emptyHint"
+            size="large"
+            class="list-empty-full"
+        />
+
+        <template v-else>
+            <div v-if="props.timeOf || props.textOf" class="list-toolbar">
+                <slot name="toolbar" />
+                <div v-if="props.timeOf" class="toolbar-group">
+                    <span class="toolbar-label">时间</span>
+                    <n-select
+                        v-model:value="year"
+                        :options="yearOptions"
+                        style="width: 110px;"
+                    />
+                    <n-select
+                        v-model:value="monthNum"
+                        :options="monthOptions"
+                        style="width: 110px;"
+                    />
+                </div>
+                <div class="toolbar-group to-right">
+                    <div v-if="props.prefKey" class="toolbar-group">
+                        <span class="toolbar-label">布局</span>
+                        <n-radio-group v-model:value="layoutMode" size="small">
+                            <n-radio-button :value="true">分页</n-radio-button>
+                            <n-radio-button :value="false">瀑布流</n-radio-button>
+                        </n-radio-group>
+                    </div>
+                    <template v-if="effectiveSorts.length > 0">
+                        <span class="toolbar-label">排序</span>
+                        <n-select
+                            v-if="effectiveSorts.length > 1"
+                            v-model:value="sortField"
+                            :options="effectiveSorts.map((s) => ({ label: s.label, value: s.value }))"
+                            style="width: 130px;"
+                        />
+                        <n-select
+                            v-model:value="sortDir"
+                            :options="dirOptions"
+                            style="width: 90px;"
+                        />
+                    </template>
+                    <n-input
+                        v-if="props.textOf"
+                        v-model:value="keyword"
+                        placeholder="搜索内容"
+                        clearable
+                        style="width: 200px;"
+                    />
+                </div>
+            </div>
+
+            <n-empty v-if="filtered.length === 0" description="没有符合条件的内容" class="list-empty" />
+
+            <div v-else class="list-content" :class="{ 'is-masonry': !paginate }">
+                <slot :items="paged" :paginate="paginate" />
+
+                <div v-if="paginate && filtered.length > props.pageSize" class="list-pager">
+                    <n-pagination
+                        v-model:page="page"
+                        :page-size="props.pageSize"
+                        :item-count="filtered.length"
+                    />
+                </div>
+            </div>
+
+            <!-- 切换到瀑布流时盖在内容区之上的「处理中」遮罩：点击即点亮（含文案），首帧渲染完成后自动隐藏 -->
+            <div v-if="masonryBusy" class="masonry-mask">
+                <n-spin size="large" />
+                <span class="masonry-mask-text">处理中…</span>
+            </div>
+        </template>
+    </div>
+</template>
+
+<style scoped>
+.head-count {
+    margin-left: 10px;
+    font-size: 12px;
+    font-weight: normal;
+    color: var(--text-muted);
+}
+.list-loading {
+    display: flex;
+    justify-content: center;
+    padding: 40px 0;
+}
+.list-empty {
+    padding: 30px 0;
+}
+/* 模块无数据：占满滚动区剩余高度，上下左右居中 */
+.list-empty-full {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+.list-pager {
+    display: flex;
+    justify-content: center;
+    padding: 10px 0 20px;
+}
+/* 列表内容区 */
+.list-content {
+    position: relative;
+}
+/* 内容滚动区作为遮罩的定位容器，遮罩覆盖整个可视区（而非仅当前内容高度） */
+.page-body {
+    position: relative;
+}
+/* 切换到瀑布流时的「处理中」遮罩：覆盖内容区可视范围，半透明不挡视线，首帧后自动消失 */
+.masonry-mask {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 240px;
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(1px);
+}
+.masonry-mask-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+</style>

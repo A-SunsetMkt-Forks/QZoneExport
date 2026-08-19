@@ -1,0 +1,11 @@
+{
+    "extends": "./.wxt/tsconfig.json",
+    "compilerOptions": {
+        "strict": true,
+        "allowJs": true,
+        "checkJs": false,
+        "skipLibCheck": true
+    },
+    "include": ["entrypoints", "core", "tests", "wxt.config.ts", "vitest.config.ts", "vue-shim.d.ts"],
+    "exclude": ["src", "viewer", "node_modules", ".output", "releases"]
+}

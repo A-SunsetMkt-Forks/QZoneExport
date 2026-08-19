@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>QQ空间导出助手 - 使用引导</title>
+    <style>
+        :root {
+            --blue: #2080f0;
+            --blue-dark: #1366d6;
+            --blue-light: #e8f3ff;
+            --orange: #f0a020;
+            --orange-light: #fff7e6;
+            --text: #333;
+            --text-light: #777;
+            --text-muted: #bbb;
+            --border: #efeff5;
+            --bg: #f6f8f7;
+            --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        * { box-sizing: border-box; margin: 0; }
+        html, body { height: 100%; }
+
+        body {
+            padding: 16px 20px 0;
+            font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            font-size: 14px;
+            color: var(--text);
+            background: var(--bg);
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            line-height: 1.6;
+        }
+
+        .wrap {
+            max-width: 960px;
+            width: 100%;
+            padding-bottom: 140px;
+        }
+
+        /* 头部 */
+        .head {
+            text-align: center;
+            margin-bottom: 14px;
+        }
+        .head h1 {
+            font-size: 22px;
+            margin-bottom: 4px;
+        }
+        .head p {
+            color: var(--text-light);
+            font-size: 13px;
+        }
+
+        /* 主体：双栏布局 */
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        /* 左栏：步骤 */
+        .steps {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            height: 100%;
+        }
+        .step {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            background: #fff;
+            border-radius: 10px;
+            border-left: 4px solid var(--blue);
+            box-shadow: var(--card-shadow);
+        }
+        .step .num {
+            flex: none;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--blue);
+            color: #fff;
+            font-weight: 600;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .step h3 {
+            font-size: 14px;
+            margin-bottom: 3px;
+        }
+        .step p {
+            font-size: 12.5px;
+            line-height: 1.6;
+            color: #555;
+        }
+
+        /* 右栏：概念 */
+        .concepts {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            height: 100%;
+        }
+        .concept {
+            flex: 1;
+            padding: 10px 14px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: var(--card-shadow);
+        }
+        .concept h4 {
+            font-size: 14px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .concept ul {
+            padding-left: 16px;
+            font-size: 12.5px;
+            line-height: 1.7;
+            color: #555;
+        }
+        .concept li {
+            margin-bottom: 1px;
+        }
+
+        /* 标签 */
+        .tag {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .tag-text { background: var(--blue-light); color: #1559b0; }
+        .tag-media { background: var(--blue-light); color: #3b6fd4; }
+        .tag-scope { background: var(--orange-light); color: #b87a00; }
+        .tag-default { background: #f0f4ff; color: #5b6dd4; }
+
+        /* 备份范围 */
+        .scope-section {
+            margin-top: 12px;
+        }
+        .scope-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .scope-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .scope-card {
+            padding: 10px 14px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: var(--card-shadow);
+            border-top: 3px solid var(--orange);
+        }
+        .scope-card h5 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #92400e;
+            margin-bottom: 5px;
+        }
+        .scope-card p {
+            font-size: 12.5px;
+            line-height: 1.6;
+            color: #555;
+            margin: 0;
+        }
+        .scope-note {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #888;
+        }
+
+        /* 默认配置组合 */
+        .preset-default {
+            margin-top: 12px;
+            padding: 10px 14px;
+            background: #f0f4ff;
+            border-radius: 10px;
+            box-shadow: var(--card-shadow);
+            border-top: 3px solid var(--blue);
+        }
+        .preset-default-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #3355a0;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .preset-default-title::before {
+            content: '📦';
+        }
+        .preset-default-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 28px;
+        }
+        .preset-default-item {
+            font-size: 13px;
+            color: #333;
+        }
+        .preset-default-label {
+            display: inline-block;
+            margin-right: 6px;
+            color: #3355a0;
+            font-weight: 600;
+        }
+        .preset-default-note {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #5a6380;
+        }
+
+        /* 底部提示 + 按钮 */
+        .footer {
+            position: sticky;
+            bottom: 0;
+            background: linear-gradient(to top, var(--bg) 60%, rgba(246, 248, 247, 0));
+            padding: 12px 0 0;
+            margin-top: 0;
+            z-index: 10;
+        }
+        .footer-inner {
+            background: #fff;
+            border-radius: 12px;
+            padding: 12px 16px;
+            box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+        }
+        .tip {
+            padding: 10px 14px;
+            background: var(--orange-light);
+            border-top: 3px solid var(--orange);
+            border-radius: 10px;
+            box-shadow: var(--card-shadow);
+            font-size: 12px;
+            line-height: 1.6;
+            color: #7a5a10;
+        }
+        .actions {
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-block;
+            padding: 9px 20px;
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn:hover {
+            background: var(--blue-dark);
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .btn-secondary {
+            background: #fff;
+            color: var(--blue);
+            border: 1px solid var(--blue);
+        }
+        .btn-secondary:hover {
+            background: var(--blue-light);
+        }
+        .foot {
+            margin-top: 12px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* ===== 引导浮层 ===== */
+        .guide-mask {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: rgba(0, 0, 0, 0.55);
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+            padding: 12px;
+            box-sizing: border-box;
+        }
+        .guide-mask.active {
+            display: flex;
+        }
+        .guide-highlight {
+            position: relative;
+            z-index: 10001;
+            border-radius: 10px;
+            box-shadow: 0 0 0 4px #fff, 0 0 0 6px var(--blue), 0 4px 20px rgba(0, 0, 0, 0.3);
+            background: #fff;
+            transition: box-shadow 0.3s;
+        }
+        .guide-card {
+            z-index: 10002;
+            width: 100%;
+            max-width: 440px;
+            padding: 16px 18px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+        }
+        .guide-step-indicator {
+            font-size: 12px;
+            color: var(--blue);
+            font-weight: 600;
+        }
+        .guide-title {
+            margin: 6px 0 8px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #222;
+        }
+        .guide-body {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.7;
+            color: #555;
+        }
+        .guide-body strong {
+            color: #333;
+        }
+        .guide-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 14px;
+        }
+        .guide-skip {
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 12px;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+        .guide-skip:hover {
+            color: #666;
+        }
+        .guide-nav {
+            display: flex;
+            gap: 8px;
+        }
+        .guide-btn {
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .guide-btn:hover {
+            background: #f5f5f5;
+        }
+        .guide-btn.primary {
+            background: var(--blue);
+            color: #fff;
+            border-color: var(--blue);
+        }
+        .guide-btn.primary:hover {
+            background: var(--blue-dark);
+        }
+        .guide-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* ===== 移动端响应式 ===== */
+        @media (max-width: 767px) {
+            body {
+                padding: 12px 12px 0;
+                align-items: stretch;
+            }
+            .head h1 {
+                font-size: 18px;
+            }
+            .head p {
+                font-size: 12px;
+            }
+            .main {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            .steps,
+            .concepts {
+                height: auto;
+            }
+            .step,
+            .concept {
+                flex: none;
+            }
+            .scope-cards {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .scope-card {
+                padding: 10px 12px;
+            }
+            .preset-default {
+                padding: 10px 12px;
+            }
+            .preset-default-items {
+                gap: 6px 18px;
+            }
+            .step {
+                padding: 10px 12px;
+                gap: 10px;
+            }
+            .concept {
+                padding: 10px 12px;
+            }
+            .concept ul {
+                padding-left: 14px;
+            }
+            .footer-inner {
+                padding: 10px 12px;
+            }
+            .actions {
+                flex-direction: column;
+                gap: 8px;
+            }
+            .btn {
+                width: 100%;
+                text-align: center;
+            }
+            .tip {
+                padding: 8px 10px;
+                font-size: 11.5px;
+            }
+            .guide-card {
+                padding: 14px 14px;
+                border-radius: 10px;
+            }
+            .guide-title {
+                font-size: 14px;
+            }
+            .guide-body {
+                font-size: 12.5px;
+            }
+            .guide-actions {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .guide-skip {
+                width: 100%;
+                text-align: left;
+                order: 3;
+                margin-top: 4px;
+            }
+            .guide-nav {
+                flex: 1;
+                justify-content: flex-end;
+            }
+        }
+
+        /* 更小屏幕 */
+        @media (max-width: 380px) {
+            .wrap {
+                max-width: 100%;
+            }
+            .head h1 {
+                font-size: 16px;
+            }
+            .preset-default-items {
+                flex-direction: column;
+                gap: 6px;
+            }
+        }
+
+        /* 引导步骤高亮元素的过渡 */
+        .step, .concept, .scope-card, .preset-default, .tip, .actions {
+            transition: box-shadow 0.3s;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap" id="mainContent">
+        <div class="head">
+            <h1>👋 欢迎使用 QQ 空间导出助手</h1>
+            <p>把 QQ 空间的说说、日志、相册、好友等内容备份为本地文件</p>
+        </div>
+
+        <div class="main">
+            <!-- 左栏：三步操作 -->
+            <div class="steps" id="guide-steps">
+                <div class="step" data-guide="steps">
+                    <div class="num">1</div>
+                    <div>
+                        <h3>打开并登录 QQ 空间</h3>
+                        <p>浏览器打开 <b>user.qzone.qq.com</b> 并登录。备份别人的空间就打开对方主页（能正常浏览即有权限）。</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="num">2</div>
+                    <div>
+                        <h3>自动弹出备份窗口</h3>
+                        <p>打开 QQ 空间页面后，助手会自动弹出「一键备份」窗口，无需手动点击扩展图标。</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="num">3</div>
+                    <div>
+                        <h3>选择内容，开始备份</h3>
+                        <p>在弹窗中勾选要备份的模块，确认后点「开始备份」。期间保持空间页面不关闭、不刷新。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右栏：核心概念 -->
+            <div class="concepts" id="guide-concepts">
+                <div class="concept" data-guide="concepts">
+                    <h4><span class="tag tag-text">文案</span> 文案内容</h4>
+                    <ul>
+                        <li><b>包含：</b>说说文字、日志正文、留言、好友列表、分享记录等文本数据</li>
+                        <li><b>格式：</b>HTML（浏览器直接看，默认）/ MarkDown（笔记工具）；JSON 始终自动导出，好友额外导出 Excel</li>
+                        <li><b>存储：</b>采集后直接写入备份目录（Chrome/Edge），或自动打包为 ZIP（Firefox 等不支持的浏览器）</li>
+                        <li><b>特点：</b>采集即得到，不依赖额外下载</li>
+                    </ul>
+                </div>
+                <div class="concept">
+                    <h4><span class="tag tag-media">媒体</span> 媒体文件</h4>
+                    <ul>
+                        <li><b>包含：</b>说说配图、日志插图、相册相片、视频、头像等文件</li>
+                        <li><b>处理：</b>文案里只记录 URL 引用，需额外下载才能得到本地文件</li>
+                        <li><b>下载方式：</b>助手直写目录（一步到位）/ 浏览器下载器 / Aria2协议下载器</li>
+                        <li><b>注意：</b>外部下载器的文件落在它自己的目录，需自行合并回备份目录</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 下部：备份范围说明 -->
+        <div class="scope-section" id="guide-scope">
+            <div class="scope-title"><span class="tag tag-scope">范围</span> 备份范围</div>
+            <div class="scope-cards">
+                <div class="scope-card">
+                    <h5>全部数据</h5>
+                    <p>完整备份所有内容。适合首次备份，或想重新开始一次完整备份的场景。</p>
+                </div>
+                <div class="scope-card">
+                    <h5>上次之后</h5>
+                    <p>仅采集上次备份后新增的内容。需保留上次备份文件并与本次产物合并，否则备份不完整。</p>
+                </div>
+                <div class="scope-card">
+                    <h5>指定时间</h5>
+                    <p>采集某个时间点之后发布的内容。适合只想要某段时期的数据，或补备某个时间段的遗漏。</p>
+                </div>
+            </div>
+            <p class="scope-note">各模块独立配置，在助手「设置」页对应模块的「备份范围」选项中调整。非全量模式下，上次备份文件必须保留。</p>
+        </div>
+
+        <!-- 默认配置组合 -->
+        <div class="preset-default" id="guide-default">
+            <div class="preset-default-title">默认配置组合</div>
+            <div class="preset-default-items">
+                <div class="preset-default-item"><span class="preset-default-label">文案格式</span>HTML</div>
+                <div class="preset-default-item"><span class="preset-default-label">备份范围</span>全量备份</div>
+                <div class="preset-default-item"><span class="preset-default-label">媒体下载</span>助手直写目录</div>
+            </div>
+            <p class="preset-default-note">首次使用建议采用默认组合，配置简单、上手快速。日常增量备份（只采集上次之后的新内容）可在「设置」页对应模块的「备份范围」中调整。</p>
+        </div>
+
+        <div class="footer">
+            <div class="footer-inner">
+            <div class="tip" id="guide-tip">
+                <b>提示：</b>文案格式选 HTML 时，备份完成后打开备份目录里的 <b>index</b> 文件即可离线浏览全部内容；
+                选 MarkDown 时需用对应的笔记工具打开。JSON 格式始终自动导出，更多选项可在助手「设置」页调整。<br>
+                媒体下载默认使用「助手直写目录」：媒体直接写入备份目录，与文案同目录、一步到位，无需额外合并。
+                若改用「浏览器下载器」，请提前关闭浏览器「下载前询问每个文件的保存位置」，否则每个文件都需手动确认。
+            </div>
+            <div class="actions" id="guide-actions">
+                <button class="btn btn-secondary" id="btnOptions" type="button">⚙️ 打开配置页面</button>
+                <a class="btn" href="https://user.qzone.qq.com/" target="_blank" rel="noreferrer">🚀 去 QQ 空间备份</a>
+            </div>
+            <div class="foot">本页仅在首次安装时出现</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引导浮层 -->
+    <div class="guide-mask" id="guideMask">
+        <div class="guide-card">
+            <div class="guide-step-indicator" id="guideIndicator"></div>
+            <div class="guide-title" id="guideTitle"></div>
+            <p class="guide-body" id="guideBody"></p>
+            <div class="guide-actions">
+                <button class="guide-skip" id="guideSkip">跳过引导</button>
+                <div class="guide-nav">
+                    <button class="guide-btn" id="guidePrev">上一步</button>
+                    <button class="guide-btn primary" id="guideNext">下一步</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./guide/welcome-guide.ts"></script>
+</body>
+
+</html>

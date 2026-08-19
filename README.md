@@ -1,160 +1,206 @@
-# 公告公告
+# QQ空间导出助手 (QZoneExport)
+
+QQ空间导出助手是一个浏览器扩展（Chrome / Edge 等 Chromium 内核浏览器，Manifest V3），用于一键备份 QQ 空间的说说、日志、日记、相册、视频、留言、好友、收藏、分享、访客等数据为本地文件，便于迁移与长期保存。
+
+> 当前版本 **v3.0**。v3 在保留 v2 旧逻辑（`legacy/`）的基础上，将采集引擎、下载管理、备份编排、进度面板等核心模块全面重写为 TypeScript，并引入独立的 Vue3 备份查看器（`viewer/`）。
+
+> 📖 用户文档（使用帮助 / 安装 / 配置 / 常见问题）见项目 [Wiki](https://github.com/ShunCai/QZoneExport/wiki)；版本变化见 [更新说明（v3）](./docs/release-notes-v3.md)。
+> 📦 在线安装：Chrome 应用商店 / Edge 加载项 / 360 应用市场（地址见扩展内「关于」页）；离线包见 [Releases](https://github.com/ShunCai/QZoneExport/releases)。
+
+---
+
+## 技术栈
+
+| 领域 | 技术 |
+| --- | --- |
+| 扩展框架 | [WXT](https://wxt.dev/)（MV3，TypeScript SDK 化构建） |
+| 语言 | TypeScript 5.9（严格模式）+ 少量遗留 JS（`legacy/`） |
+| 前端 UI（popup / options） | Vue 3.5 + Naive UI + Pinia 4 |
+| 前端 UI（备份进度面板） | 纯 TypeScript + Shadow DOM（`entrypoints/backup-panel`，**非 Vue**） |
+| 查看器图表 | ECharts 6（足迹地图） |
+| 查看器大图 | PhotoSwipe 5（图片 / 视频混合画廊） |
+| 存储 | `idb`（IndexedDB 封装）+ `chrome.storage` + `chrome.cookies` |
+| 压缩 | `@zip.js/zip.js` |
+| 内容解析 | `json5` |
+| 构建工具 | WXT + Vite 7（查看器使用独立的 `viewer/vite.config.ts` 构建） |
+| 测试 | Vitest 3（happy-dom / fake-indexeddb） |
+| 代码质量 | ESLint 9 + Prettier 3 |
+
+---
+
+## 目录结构
+
+```
+QZoneExport/
+├── core/                      # 核心 TS 逻辑（与扩展运行时无关，可单测）
+│   ├── collector/             # 采集引擎
+│   │   ├── modules/           # 各数据类型采集模块
+│   │   │   ├── messages.ts    # 说说
+│   │   │   ├── boards.ts      # 留言板
+│   │   │   ├── blogs.ts       # 日志
+│   │   │   ├── diaries.ts     # 日记
+│   │   │   ├── shares.ts      # 分享
+│   │   │   ├── photos.ts      # 相册 / 相片
+│   │   │   ├── videos.ts      # 视频
+│   │   │   ├── friends.ts     # 好友
+│   │   │   ├── visitors.ts    # 访客
+│   │   │   ├── favorites.ts   # 收藏
+│   │   │   ├── helpers.ts     # 媒体登记 / 表情下载 / 后缀解析等公共能力
+│   │   │   └── engine.ts      # 采集调度引擎
+│   │   ├── pipeline.ts        # 备份编排流水线
+│   │   ├── increment.ts       # 增量备份
+│   │   ├── events.ts / checkpoint.ts
+│   ├── downloader/            # 下载管理
+│   │   ├── drivers/           # 下载驱动：browser(浏览器原生) / aria2 / disk(本地磁盘)
+│   │   ├── manager.ts         # 下载编排（并发 / 重试 / 进度 / 卡死看门狗）
+│   │   ├── task-queue.ts      # 任务队列
+│   │   ├── pool.ts            # 并发池
+│   │   └── m3u8-merger.ts     # 视频 TS 合并
+│   ├── qzone-api/             # QQ空间接口客户端（clients / request / urls / context / types）
+│   ├── store/                 # 持久化层（db / storage / backup-db）
+│   ├── shared/                # 通用工具（config / utils / logger / errors / format / crypto / url / messages ...）
+│   ├── archive/               # 压缩打包（zip-writer / zip-fallback）
+│   ├── export/                # 导出编排（site / user-info）
+│   ├── fs/                    # 文件系统抽象（disk-fs / writer）
+│   ├── net/                   # 网络层（suffix 等）
+│   └── ext/                   # 扩展 API 封装（keepalive 等）
+├── entrypoints/               # WXT 入口
+│   ├── background.ts          # Service Worker 后台（下载调度、消息中枢、下载重命名预设）
+│   ├── engine-bridge.content.ts   # 注入 qzone 页面的采集桥接（替代旧 content.js）
+│   ├── backup-panel.content.ts     # Shadow DOM 进度面板入口（纯 TS，非 Vue）
+│   ├── backup-panel/          # 进度面板 TS 模块（template / api / dm / context / styles / utils ...）
+│   ├── legacy-bridge.content.ts   # 旧版脚本桥接
+│   ├── qzone-hint.content.ts      # 页面提示
+│   ├── popup/  options/       # Vue3 + Naive UI 的弹窗与设置页（*.vue）
+│   └── welcome.html           # 欢迎页
+├── legacy/                    # v2 旧版逻辑（原样打包执行，与 SW 共享作用域）
+│   └── background.js
+├── viewer/                    # 备份查看器（Vue3，独立 Vite 构建，产物打入扩展）
+│   ├── src/                   # 查看器源码（*.vue / *.ts）
+│   ├── map-vendor/            # 地图数据（坐标转换 UMD）
+│   ├── index.html / vite.config.ts / tsconfig.json
+├── public/                    # 静态资源（含 viewer 构建产物，随扩展打包）
+├── scripts/                   # 构建辅助脚本（生成查看器 mock 等）
+├── shell/                     # PowerShell 辅助脚本（如 M3U8 合并）
+├── tests/                     # Vitest 单元测试（*.test.ts）
+├── wxt.config.ts              # WXT 构建与 manifest 配置
+├── vitest.config.ts           # 测试配置
+└── tsconfig.json
+```
+
+---
+
+## 环境要求
+
+- Node.js ≥ 20（建议 LTS）
+- 包管理器：npm（项目使用 `package-lock.json`）
+
+---
+
+## 安装
+
+```bash
+# 安装依赖（postinstall 会自动执行 wxt prepare 生成 .wxt 配置）
+npm install
+```
 
-天地是万物众生的客舍，光阴是古往今来的过客。
+---
 
-青春，总会逝去，宴席，总会散场，助手也终将迎来落幕。
+## 常用命令
 
-即日起，项目归档，停止维护与更新。
+| 命令 | 说明 |
+| --- | --- |
+| `npm run dev` | 启动 WXT 开发模式（热重载，输出到 `.output/QZoneExport`） |
+| `npm run dev:viewer` | 单独启动查看器开发服务器（需先生成 mock 数据） |
+| `npm run build` | 先构建查看器，再构建扩展生产包 |
+| `npm run zip` | 构建并打包为可发布的 zip |
+| `npm run build:viewer` | 仅构建查看器（输出到 `public/viewer/`） |
+| `npm run compile` | TypeScript 类型检查（`tsc --noEmit`） |
+| `npm run compile:viewer` | 查看器类型检查（`vue-tsc`） |
+| `npm run test` | 运行 Vitest 单元测试（`vitest run`） |
+| `npm run lint` | ESLint 检查 |
+| `npm run format` | Prettier 格式化 |
 
-无不可抗力隐私，纯粹是因作者能力有限，且要抽时间撩妹脱单了。。。。。。
+### 本地加载扩展
 
+1. 执行 `npm run build`（或 `npm run dev`）。
+2. 打开 Chrome `chrome://extensions`，开启「开发者模式」。
+3. 点击「加载已解压的扩展程序」，选择构建输出目录 `.output/QZoneExport`（生产）或对应的 dev 目录。
 
-# QQ空间导出助手
+---
 
-一键快速备份QQ空间的说说、日志、日记、相册、视频、留言、好友、收藏、分享、访客为文件，便于迁移与保存。
+## 主要功能
 
-# 前言概述
+- **全类型备份**：说说、日志、日记、相册/相片、视频、留言、好友、收藏、分享、访客，含评论 / 点赞 / 最近访问等关联数据。
+- **QQ 表情图片备份**：内容中的 `[em]eXXX[/em]` 表情占位符在采集阶段被解析并下载到 `Common/images/eXXX.gif`（固定文件名、跨模块去重），查看器离线也能正确渲染表情，不复依赖在线 CDN。
+- **多下载驱动**：浏览器原生下载、aria2、本地磁盘等，支持并发控制与失败重试。
+- **增量备份**：基于已备份数据跳过重复项，仅采集新增内容。
+- **断点续传**：下载任务持久化，异常中断后可继续。
+- **富媒体大图查看**：备份查看器基于 PhotoSwipe 提供图片与视频混合画廊，支持图文 / 视频交叉浏览；视频大图的播放控件不会被底部缩略图条遮挡。
+- **离线查看器**：打包生成的备份包含独立 Vue3 查看器（`viewer/`），双击 `index.html` 即可在 `file://` 下离线浏览，含足迹地图（ECharts）。
+- **配置灵活**：备份范围、下载方式、分类目录、冲突策略、媒体类型探测等均可在 options 页配置。
 
-落叶随风，青春，稍纵即逝，QQ空间，一个承载了很多人的青春的地方。
+---
 
-或许，是遗憾，毕竟，谁的青春没留遗憾呢，[《曾经沧海无限感慨，唯愿往事随风》](https://user.qzone.qq.com/20050606/blog/1559786793)。
-[![我是往事随风。你好，我是轻舞飞扬。](https://s1.ax1x.com/2020/05/16/YcekPP.gif)](https://v.qq.com/x/page/f08719wqfd0.html)
+## 配置说明
 
-或许，是害怕，曾经的青春变得不可控，毕竟，新浪博客相册、网易相册、腾讯微博等相继停运，无不意味着，互联网产品都有着自己的生命周期。
+### 扩展 Manifest（`wxt.config.ts`）
 
-于是，萌生了备份QQ空间的念头，也在互联网上找到一些工具与脚本，要么操作复杂、要么备份类型单一，于是乎，简单易用全类型备份的QQ空间导出助手诞生了。
+构建时由 `wxt.config.ts` 的 `manifest` 字段生成。关键权限：
 
-# 功能清单
-1、支持备份QQ空间文字说说、图文说说、语音说说、长说说，以及评论、点赞、最近访问
+- `downloads`：浏览器原生下载管理（`chrome.downloads.download` / `cancel` / `erase` / `pause` / `resume` / `search` / `onCreated` / `onChanged` 等）。
+- `storage` / `unlimitedStorage`：配置与备份数据持久化。
+- `cookies`：读取 QQ空间登录态。
+- `declarativeNetRequest` / `offscreen`：网络与离屏处理。
+- `host_permissions: ['<all_urls>']`：访问 QQ空间及 CDN 资源。
 
-2、支持备份QQ空间文字日志、图文日志、模板日志，以及评论、点赞、最近访问
+> `content_scripts` 注入 `vendor/aria2/aria2.js` 及 `css/content.css`（旧版全局 polyfill `utils.js` / `config.js` 与 `filer.min.js` 已在 v3 移除）。查看器产物 `viewer/*` 通过 `web_accessible_resources` 对 qzone 页面可访问，备份时由内容脚本写入备份目录。
 
-3、支持备份QQ空间文字日记、图文日记，以及评论、点赞、最近访问
+### 备份配置（`core/shared/backup-options.ts`）
 
-4、支持备份QQ空间相册/相片，以及相册/相片的评论、相册/相片的点赞、相册的最近访问
+备份范围、下载驱动类型、并发数、目录命名规则、文件名清洗策略、媒体类型自动探测开关等核心选项在此定义，并由 options 页持久化到 `chrome.storage`。
 
-5、支持备份QQ空间视频，以及评论、点赞、最近访问
+### 下载重命名（重要）
 
-6、支持备份QQ空间留言寄语与留言、以及留言回复
+浏览器原生下载（`chrome.downloads.download`）的 `filename` 仅为「建议名」，会被响应头 `Content-Disposition` 覆盖；且 `onDeterminingFilename` 事件中的 `item.filename` 只有 basename（目录已被剥离）。
 
-7、支持备份QQ好友、含好友成立时间、单向好友检测、空间访问权限检测、特别关心的好友等
+本项目在 `entrypoints/background.ts` 维护一张「下载强制重命名预登记表」`DLPresetNames`（挂到 Service Worker 全局，与 `legacy/background.js` 共享作用域）。发起下载**之前**按 `url → 相对路径` 登记，由 `legacy/background.js` 中唯一的 `onDeterminingFilename` 监听器消费并 `suggest` 出完整相对路径。各路径段在 `core/downloader/drivers/browser.ts` 的 `buildRelativePath()` 中逐段清洗，避免 `:`、`?`、`|`、尾部空格等导致整次下载回退到默认名与根目录。
 
-8、支持备份QQ空间分享内容，以及评论、点赞、最近访问
+> 健壮性：预登记表同时以「原始 URL」与「去参 URL（`?` 之后部分剥离）」双向注册 / 查找，并命中后清理全部等价键，规避 Chrome 在 `onDeterminingFilename` 上报的 `item.url` 与注册 URL 不一致（重定向 / 去参）导致预设丢失、文件偶发落到备份根目录的问题。
 
-9、支持备份QQ空间收藏内容
+### 媒体类型探测与命名一致（#2）
 
-10、支持备份QQ空间访客，仅支持备份谁访问了我，非全部备份，备份内容的多少，看是不是黄钻
+`core/collector/modules/helpers.ts` 的 `resolveMediaSuffix(url, env)` 统一解析落盘文件的后缀：开启自动探测时优先取 MIME 真实类型，探测失败回退 URL 扩展名，最后兜底 `.jpg`。所有采集模块统一调用，保证「类型探测 / 落盘命名 / 引用地址」三者一致，避免「落盘为 A.png 但引用为 A.gif」「部分图片缺扩展名」等问题。
 
-# 快速开始
+### 查看器构建约束（`viewer/vite.config.ts`）
 
-<span style="color:red">**适用于老司机的简易核心教程，新手用户请跳转到[新手导航](#新手导航)**</span>
+查看器产物写入 `public/viewer/`，随扩展打包并在备份时拷入备份包。其为 `file://` 直接打开而构建：
 
-1、阅读[隐私政策](https://www.lvshuncai.com/archives/qzone-export-privacy-policy.html)，并安装并配置助手
+- `base: './'`：相对路径，避免指向磁盘根。
+- 产物为 IIFE 单文件（`index.js` / `index.css`），无 hash、无 crossorigin，保证固定拷贝清单可用。
+- 禁止任何 CDN 外链，资源内联或随产物拷贝。
 
-2、<span style="color:red">登录并访问</span>需要备份的QQ空间，在<span style="color:red">备份的QQ空间页面</span>点击浏览器扩展栏的助手图标开始备份
+---
 
-3、助手开始采集数据，采集时长视空间数据量而定，请耐心等待采集完成，主号建议睡前备份
+## 测试
 
-4、数据采集完成后，采集页面点击<span style="color:red">打包下载</span>按钮打包<span style="color:red">文案内容(即说说、日志等文字内容)</span>到压缩包
+单元测试位于 `tests/`，使用 Vitest + happy-dom + fake-indexeddb：
 
-5、等待压缩包下载完成，压缩包存放的是<span style="color:red">文案内容</span>，不包含<span style="color:red">多媒体文件</span>，解压后得到<span style="color:red">QQ空间备份_QQ号</span>命名的文件夹
+```bash
+npm run test                              # 运行全部
+npx vitest run tests/collectors.test.ts   # 运行单个
+```
 
-6、等待多媒体文件下载完成，多媒体文件将会下载到助手配置的<span style="color:red">下载工具本身所设置的文件夹</span>中，生成<span style="color:red">QQ空间备份_QQ号</span>命名的文件夹
+---
 
-7、合并第5步与第6步中的两个<span style="color:red">QQ空间备份_QQ号命名的文件夹</span>中的内容，即剪切或复制其中一个所有内容到另外一个即可
+## 设计文档与分析
 
-8、打开<span style="color:red">合并后的QQ空间备份_QQ号命名的文件夹</span>中的<span style="color:red">index</span>文件查看备份内容即可
+- [备份进度面板 & 媒体下载管理 · 系统性故障分析报告](./backup-progress-panel-analysis.md)：覆盖 7 个维度、F1–F14 故障点与具体修复方案，含 F9(P0) 进度通道断裂致媒体下载冻死、F11 卡死超时兜底、F6/F7/F8/F12 错误健壮性与 UI 反馈等。
 
-9、如需要，可再次把<span style="color:red">合并后的QQ空间备份_QQ号命名的文件夹</span>复制、剪切到其它地方可进行再次备份，避免因磁盘损坏等导致备份丢失或损坏
+---
 
-10、[如何在断网状态下查看QQ空间备份内容](https://www.lvshuncai.com/archives/switch-qzx-jsdelivr-to-local.html)
+## 许可证
 
-# 新手导航
+Apache-2.0。仅供个人学习研究与数据备份之用。
 
-<span style="color:red">**新手用户请按顺序点击下方链接进行阅读**</span>
-
-1、[查看助手隐私政策，了解助手对你的隐私保护](https://www.lvshuncai.com/archives/qzone-export-privacy-policy.html)
-
-2、[如何安装助手，适用于未安装助手用户](https://www.lvshuncai.com/archives/qzone-export-install.html)
-
-3、[简易视频教程，适用于初步了解助手备份流程](#视频教程)
-
-4、[常见热门问题，避免踩坑的最佳方式](https://www.lvshuncai.com/archives/qzone-export-issue.html)
-
-5、[如何配置助手，了解助手核心配置，适合自己才是最合适的](https://www.lvshuncai.com/archives/qzone-export-configuration.html)
-
-6、[如何开始备份，一份不是核心的核心教程](https://www.lvshuncai.com/archives/qzone-export-usage.html)
-
-7、[如何在断网状态下查看QQ空间备份内容](https://www.lvshuncai.com/archives/switch-qzx-jsdelivr-to-local.html)
-
-# 视频教程
-去[bilibili查看](https://www.bilibili.com/video/BV16r4y1x7hP?zw)
-> 非原创，来源于助手用户[阿博特-安稳](https://space.bilibili.com/36411485)投稿
-
-# 备份预览
-
-**本预览内容基于助手<span style="color:red">HTML备份类型</span>备份生成，完整预览与交互[点击这里浏览更多](https://demo.lvshuncai.com/qzone-export/index.html)**
-
-## 首页预览
-
-![](https://s1.ax1x.com/2022/10/25/xWCMyF.png)
-
-## 说说预览
-
-![](https://s1.ax1x.com/2022/10/25/xWC8oR.png)
-
-## 日志预览
-
-![](https://s1.ax1x.com/2022/10/25/xWCtW6.png)
-
-![](https://s1.ax1x.com/2022/10/25/xWCdyD.png)
-
-## 相册预览
-
-![](https://s1.ax1x.com/2022/10/25/xWCDwd.png)
-
-![](https://s1.ax1x.com/2022/10/25/xWCrTA.png)
-
-## 留言预览
-
-![](https://s1.ax1x.com/2022/10/25/xWC2Sf.png)
-
-## 好友预览
-
-![](https://s1.ax1x.com/2022/10/25/xWCITs.png)
-
-# 项目依赖
-- [Blob.js](https://note.youdao.com/)
-- [Bootstrap](https://github.com/twbs/bootstrap)
-- [Filer](https://github.com/filerjs/filer)
-- [FileSaver.js](https://github.com/eligrey/FileSaver.js)
-- [JQuery](https://github.com/jquery/jquery)
-- [Jszip](https://raw.github.com/Stuk/jszip)
-- [Lodash](https://github.com/lodash/lodash)
-- Ponyfill
-- Popper
-- [Sheetjs](https://github.com/sheetjs/sheetjs)
-- [Template.js](https://github.com/yanhaijing/template.js)
-- [Thunder-link.js](https://open.thunderurl.com/)
-- [Turndown](https://github.com/domchristie/turndown)
-- [lightGallery](https://github.com/sachinchoolur/lightGallery)
-
-# 喝杯饮料
-![赞赏码-微信](https://s1.ax1x.com/2020/05/16/YcePUI.png)
-![付款码-QQ](https://s1.ax1x.com/2020/05/16/Ycei5t.png)
-![付款码-支付宝](https://s1.ax1x.com/2020/05/16/YceCVA.png)
-
-# 交流群
-QQ群：959828088
-
-# 注意事项
-
-1、本项目只做个人学习研究之用，不是官话，当初就是为了学习Chrome扩展开发写的工具，随时会因不可抗力因素下架，且用且珍惜。
-
-2、本助手开源免费，请勿从第三方购买或第三方下载，助手不保证第三方安全可靠。
-
-3、本助手基于[QQ空间官方网站](https://qzone.qq.com/index.html)备份个人空间数据，与QQ空间不存在任何联系。
-
-4、使用本助手即同意助手收集QQ空间网站的Cookie信息，仅用于获取QQ空间数据，不传输任何数据到后台服务器，仅保存到浏览器客户端
-
-5、更多详情请查看[隐私政策](https://www.lvshuncai.com/archives/qzone-export-privacy-policy.html)
+> 用户向的使用文档、隐私政策与版本变化，见项目 [Wiki](https://github.com/ShunCai/QZoneExport/wiki) 与 [更新说明（v3）](./docs/release-notes-v3.md)。

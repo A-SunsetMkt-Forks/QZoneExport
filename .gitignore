@@ -1,3 +1,34 @@
 /releases
 backup
 json
+.qoder
+
+# Node / 构建产物
+node_modules/
+.output/
+.output_bak/
+.output_stale/
+.output_stale2/
+.output_stale3/
+.wxt/
+*.log
+
+# 查看器构建产物（由 npm run build:viewer 生成，不入版本控制）
+/public/viewer/index.html
+/public/viewer/index.js
+/public/viewer/index.css
+/public/viewer/Common/
+/public/viewer/vendor/
+# 开发用样例数据
+/viewer/mock/
+
+# 交接文档与个人笔记（本地维护，不入版本控制）
+/docs/
+
+# 参考文件不入版本控制
+.reference/
+
+# IDE / Agent 工作数据（本地维护，不入版本控制）
+.codebuddy/
+.qoder
+.workbuddy

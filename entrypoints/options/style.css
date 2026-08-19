@@ -1,0 +1,48 @@
+/**
+ * 选项页全局样式
+ * 说明：提示文字（.hint）需在 App 与各子组件中表现一致，而 scoped 样式无法跨组件生效，
+ * 故统一在此定义，各组件不再各自声明，避免样式走偏。
+ */
+
+/* 配置项后的行内说明文字 */
+.hint {
+    margin-left: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #999;
+}
+
+/* 提示内的强调（限制、前置条件、风险） */
+.hint b {
+    font-weight: 600;
+    color: #d03050;
+}
+
+/*
+ * 区块级提示：占满宽度，与行内细字提示形成层级。
+ * 仅用于同时满足「产物不可用/不可补救」「需用户额外动作」「条件性出现」的提示，
+ * 否则块会堆积成新的噪音。
+ */
+.block-alert {
+    margin: 4px 0 16px;
+}
+
+/* 需要引起注意的说明文字 */
+.hint.warn-hint {
+    color: #f0a020;
+}
+
+/* 操作结果反馈：成功 / 失败 */
+.hint.ok-hint {
+    color: #2080f0;
+}
+
+.hint.error-hint {
+    color: #d03050;
+}
+
+/* 独立成行的说明文字（不跟随在控件后面） */
+.hint.block-hint {
+    display: block;
+    margin: 8px 0 14px;
+}
