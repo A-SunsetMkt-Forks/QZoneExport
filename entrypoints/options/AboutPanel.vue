@@ -13,6 +13,7 @@ const INSTALL_LINKS = [
     { label: 'Chrome 应用商店', url: 'https://chrome.google.com/webstore/detail/aofadimegphfgllgjblddapiaojbglhf' },
     { label: 'Edge 加载项', url: 'https://microsoftedge.microsoft.com/addons/detail/djfalpkpjgpkfnkfmnegbalnicdoljcn' },
     { label: '360 应用市场', url: 'https://ext.chrome.360.cn/webstore/detail/dboplopmhoafmbcbmcecapkmcodhcegh' },
+    { label: 'Firefox 扩展商店', url: 'https://addons.mozilla.org/zh-CN/firefox/addon/qzone-export/' },
 ];
 
 /** 反馈渠道 */

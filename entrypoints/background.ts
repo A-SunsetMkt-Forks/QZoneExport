@@ -1,3 +1,4 @@
+import '../core/shared/polyfill';
 import { defineBackground } from 'wxt/utils/define-background';
 import { registerKeepAlive, startKeepAlive, stopKeepAlive, KEEPALIVE_ALARM } from '../core/ext/keepalive';
 import { BG_MSG, DLEvent } from '../core/shared/messages';
@@ -236,6 +237,25 @@ export default defineBackground(() => {
      *     无需在 background 重复 gating，且不必依赖脆弱的 URL 正则匹配。
      * 因此：图标常驻可点，点击即打开 popup，由 popup 内部判断当前页并给出对应提示。
      */
+
+    // ================= Firefox：右键扩展图标菜单加入「打开配置页面」 =================
+    // Chrome 的 action 右键菜单默认自带「选项」入口（配了 options_ui 即出现），无需处理；
+    // Firefox 默认没有，但支持 menus.ContextType='action'，可在「右键扩展图标」的菜单里加自定义项，
+    // 点击后 chrome.runtime.openOptionsPage() 打开配置页，实现双端一致的「右键图标 → 打开设置」。
+    if (import.meta.env.FIREFOX && chrome.contextMenus) {
+        try {
+            chrome.contextMenus.removeAll(() => {
+                chrome.contextMenus.create({ id: 'qze-open-options', title: '打开配置页面', contexts: ['action'] });
+                chrome.contextMenus.onClicked.addListener((info) => {
+                    if (info.menuItemId === 'qze-open-options') {
+                        try { chrome.runtime.openOptionsPage(); } catch { /* ignore */ }
+                    }
+                });
+            });
+        } catch {
+            // Firefox 个别环境不支持 contextMenus 时静默降级，不影响其它功能
+        }
+    }
 
     /**
      * 迁移遗留备份历史（chrome.storage.local 遗留单键 'Backedup' → 分键 'backup:uin:module'）。
@@ -688,10 +708,17 @@ export default defineBackground(() => {
     // P3：新引擎的保活开关消息
     // 必须显式 sendResponse：旧背景页监听器对未识别类型也会 return true，
     // 若无人回复，内容脚本侧 sendMessage 的 Promise 会一直 pending
-    chrome.runtime.onMessage.addListener(async (request, _sender, sendResponse) => {
+    chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+        // Firefox 兼容：MDN 明确「勿把 async 函数传给 onMessage」——async 监听器返回的 Promise 会被当作
+        // 响应，覆盖内部 sendResponse（Chrome 忽略 Promise 用 sendResponse，故仅 Firefox 中招）。
+        // 症状：content 侧 sendMessage 收到 undefined → 如「预检文件已下载却报测试失败」「Browser 媒体下载失败」。
+        // 修复：改非 async 外层——content 消息 return true 保持通道 + IIFE 内原逻辑照常 sendResponse；
+        // 非 content 消息 return（不响应），不干扰其他 onMessage 监听器。
         if (!request || request.from !== 'content') {
             return;
         }
+        void (async () => {
+        // ===== 原 async 监听器函数体（缩进保持原样以最小化 diff）=====
         if (request.type === BG_MSG.KEEPALIVE_START) {
             return new Promise<void>((resolve) => {
                 startKeepAlive()
@@ -935,7 +962,7 @@ export default defineBackground(() => {
                             const ct = res.headers.get('content-type') || '';
                             const m = /charset=([\w-]+)/i.exec(ct);
                             const charset = m ? m[1] : 'utf-8';
-                            let text = '';
+                            let text: string;
                             try {
                                 text = new TextDecoder(charset).decode(buffer);
                             } catch {
@@ -968,7 +995,7 @@ export default defineBackground(() => {
                 // 关键：必须在 download() 之前登记，因为 onDeterminingFilename 可能早于
                 // download() 的回调返回 downloadId（此时只能靠 url 命中）
                 if (filename) dlPresetNames.remember(url, filename);
-                const downloadId = await chrome.downloads.download({ url, filename, conflictAction: 'uniquify', saveAs: false });
+                const downloadId = await chrome.downloads.download({ url, filename, conflictAction: 'overwrite', saveAs: false });
                 if (downloadId > 0) {
                     if (filename) dlPresetNames.rememberId(downloadId, filename);
                     // 登记到进度跟踪表，避免 onChanged 进度被 _shouldTrack 吞掉
@@ -1119,5 +1146,72 @@ export default defineBackground(() => {
         }
 
         return;
+        })();
+        return true;
+    });
+
+    /* ===== Firefox 文案/查看器落盘通道（形态 B：content 数据 → background blob → downloads.download 直写） =====
+     * DownloadsBackend（core/fs/downloads-writer.ts）经 onConnect('qze-write') 提交写文件请求。
+     * 走 onConnect 而非 onMessage：主 onMessage 监听器是 async，会压制其他监听器的异步响应。
+     * data 支持 string（文本）或 ArrayBuffer/Uint8Array（二进制，结构化克隆跨上下文）。
+     * filename 相对默认下载目录、支持子目录（Firefox 已探针实测自动创建），落盘到
+     * 下载目录/QQ空间备份_<uin>/<path>，内存=单文件。
+     */
+    chrome.runtime.onConnect.addListener((port) => {
+        if (port.name !== 'qze-write') return;
+        port.onMessage.addListener((msg: any) => {
+            if (!msg || msg.cmd !== 'write_file') return;
+            const path = typeof msg.path === 'string' && msg.path ? msg.path : '';
+            const data = msg.data;
+            if (!path || (typeof data !== 'string' && !(data instanceof ArrayBuffer) && !ArrayBuffer.isView(data))) {
+                try { port.postMessage({ ok: false, error: '无效的 write_file 参数' }); } catch { /* ignore */ }
+                return;
+            }
+            (async () => {
+                let bytes: Uint8Array;
+                if (typeof data === 'string') {
+                    bytes = new TextEncoder().encode(data);
+                } else if (data instanceof ArrayBuffer) {
+                    bytes = new Uint8Array(data);
+                } else {
+                    bytes = new Uint8Array(
+                        (data as ArrayBufferView).buffer,
+                        (data as ArrayBufferView).byteOffset,
+                        (data as ArrayBufferView).byteLength,
+                    );
+                }
+                // slice 转成精确范围 ArrayBuffer（BlobPart 要求 ArrayBuffer，不接受 ArrayBufferLike/SharedArrayBuffer）
+                const blob = new Blob(
+                    [bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer],
+                    { type: 'application/octet-stream' },
+                );
+                const url = URL.createObjectURL(blob);
+                try {
+                    const id = await chrome.downloads.download({
+                        url, filename: path, conflictAction: 'overwrite', saveAs: false,
+                    });
+                    // 轮询 search 等 complete/interrupted（与探针 dlsub 同法）
+                    const state = await new Promise<string>((resolve) => {
+                        const t0 = Date.now();
+                        const timer = setInterval(async () => {
+                            const items = await chrome.downloads.search({ id }).catch(() => []);
+                            const it = items && items[0];
+                            if (!it) { clearInterval(timer); resolve('missing'); return; }
+                            if (it.state === 'complete' || it.state === 'interrupted' || Date.now() - t0 > 30000) {
+                                clearInterval(timer);
+                                resolve(it.state);
+                            }
+                        }, 300);
+                    });
+                    if (state === 'complete') return { ok: true };
+                    return { ok: false, error: '下载未完成: ' + state + ' (' + path + ')' };
+                } finally {
+                    try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+                }
+            })().then((r) => { try { port.postMessage(r); } catch { /* ignore */ } })
+              .catch((e: unknown) => {
+                try { port.postMessage({ ok: false, error: String(e && ((e as Error).stack || (e as Error).message) || e) }); } catch { /* ignore */ }
+            });
+        });
     });
 });

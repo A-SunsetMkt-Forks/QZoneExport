@@ -1,3 +1,4 @@
+import '../core/shared/polyfill';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { createPanel } from './backup-panel/api';
 

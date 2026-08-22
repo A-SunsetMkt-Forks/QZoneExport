@@ -4,8 +4,9 @@
         "strict": true,
         "allowJs": true,
         "checkJs": false,
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "types": ["chrome", "node"]
     },
-    "include": ["entrypoints", "core", "tests", "wxt.config.ts", "vitest.config.ts", "vue-shim.d.ts"],
+    "include": ["entrypoints", "core", "tests", "wxt.config.ts", "vitest.config.ts", "vue-shim.d.ts", ".wxt/wxt.d.ts"],
     "exclude": ["src", "viewer", "node_modules", ".output", "releases"]
 }

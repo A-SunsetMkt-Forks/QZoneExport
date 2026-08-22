@@ -132,7 +132,7 @@ export class VideosCollector implements ModuleCollector {
     async collect(_ctx: CollectContext): Promise<void> {
         const env = this.env;
         const cfg = env.config.Videos;
-        let videos = await this.runCollection(_ctx, false);
+        const videos = await this.runCollection(_ctx, false);
 
         // 导出数据文件
         await env.report('export', 0, 1);

@@ -3,7 +3,7 @@
  * 单独成文件：`<script setup>` 里不能有 ES 模块导出（含类型导出），而 MediaGrid 与各页面
  * 都要用同一份定义。
  */
-import { formatTime } from './format';
+import { formatTime, timeValue, isValidTimestampMs } from './format';
 import { assetUrl } from './sources';
 import {
     externalVideoUrl,
@@ -167,25 +167,50 @@ export function photoThumbUrl(photo: Record<string, any>): string {
     return assetUrl(path);
 }
 
-/** 相片拍摄时间（rawshoottime 优先，其次 shootTime） */
-export function photoShootTime(photo: Record<string, any>): number | string | undefined {
-    return photo.rawshoottime || photo.shootTime || photo.shoottime;
-}
-
-/** 相片上传时间 */
-export function photoUploadTime(photo: Record<string, any>): number | string | undefined {
-    return photo.uploadtime || photo.uploadTime;
-}
+/** 相片时间优先级：upload=上传优先、拍摄兜底；shoot=拍摄优先、上传兜底 */
+export type PhotoTimePriority = 'upload' | 'shoot';
 
 /** 相片时间：拍摄优先、兜底上传（用于年/月筛选与默认排序） */
 export function photoTimeOf(photo: Record<string, any>): number | string | undefined {
-    return photoShootTime(photo) || photoUploadTime(photo);
+    return resolvePhotoTime(photo, 'shoot');
+}
+
+/**
+ * 统一相片时间解析：按 priority 决定 upload(上传) / shoot(拍摄) 谁优先，另一类兜底；
+ * 逐字段跳过非法时间（1970 纪元占位、未来时间戳等，见 isValidTimestampMs）：转载相片
+ * uploadTime 常回 "1970-01-01 07:59:59"、shootTime 可能是 UINT32 哨兵换算成的未来年份，都应忽略。
+ * 与 Markdown 导出的 resolveTime 同一口径，供多页面复用。
+ */
+export function resolvePhotoTime(photo: Record<string, any>, priority: PhotoTimePriority = 'upload'): number | string | undefined {
+    const uploadFields = ['uploadtime', 'uploadTime'];
+    const shootFields = ['rawshoottime', 'shootTime', 'shoottime'];
+    const order = priority === 'upload' ? [...uploadFields, ...shootFields] : [...shootFields, ...uploadFields];
+    for (const key of order) {
+        const raw = photo[key];
+        if (raw === undefined || raw === null || raw === '') continue;
+        const ts = timeValue(raw);
+        if (!ts || !isValidTimestampMs(ts)) continue; // 1970 纪元占位 / 未来时间戳等非法值
+        return raw;
+    }
+    return undefined;
 }
 
 /** 相片拍摄地点 */
 export function photoLocation(photo: Record<string, any>): string {
     const lbs = photo.custom_lbs || photo.lbs;
     return lbs ? (lbs.idname || lbs.name || '') : '';
+}
+
+/**
+ * 「上传时间」展示文本：QQ 对转载相片常回 1970 纪元占位（uploadtime/uploadTime = "1970-01-01..."，
+ * 真实拍摄时间在 shootTime），也可能返回未来时间戳哨兵。此时不展示该行（返回空串，被 meta 的
+ * 空值过滤掉），避免显示 1970 或未来年份。
+ */
+function uploadTimeText(photo: Record<string, any>): string {
+    const raw = photo.uploadtime || photo.uploadTime;
+    if (raw === undefined || raw === null || raw === '') return '';
+    const ts = timeValue(raw);
+    return !ts || !isValidTimestampMs(ts) ? '' : formatTime(raw);
 }
 
 /**
@@ -201,7 +226,7 @@ export function photoMediaOf(photo: Record<string, any>): MediaItem {
         desc: photo.desc && photo.desc !== photo.name ? photo.desc : '',
         meta: [
             { label: '拍摄时间', value: formatTime(photo.rawshoottime || photo.shootTime) },
-            { label: '上传时间', value: formatTime(photo.uploadtime || photo.uploadTime) },
+            { label: '上传时间', value: uploadTimeText(photo) },
             { label: '拍摄地点', value: lbs ? (lbs.idname || lbs.name || '') : '' },
             { label: '赞', value: String(likeTotal(photo)) },
         ],

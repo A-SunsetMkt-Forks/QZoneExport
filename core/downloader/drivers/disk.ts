@@ -85,11 +85,31 @@ export class DiskDriver implements DownloadDriver {
                 signal: controller.signal,
             });
             clearTimeout(timer);
-            if (!resp.ok || !resp.body) {
+            if (!resp.ok) {
                 return { error: `HTTP ${resp.status} ${resp.statusText || ''}`.trim() };
             }
             const total = Number(resp.headers.get('content-length')) || 0;
-            await this.streamToDisk(resp.body as ReadableStream<Uint8Array>, req, reporter, total);
+            const filepath = (req.dir ? req.dir.replace(/\/$/, '') + '/' : '') + req.name;
+            if (this.writer.diskEnabled) {
+                // Chrome 直写盘：流式写盘，避免整文件驻留内存。
+                if (!resp.body) {
+                    return { error: 'HTTP 响应缺少可读响应体（直写盘模式需要 ReadableStream）' };
+                }
+                await this.streamToDisk(resp.body as ReadableStream<Uint8Array>, req, reporter, total);
+            } else {
+                // Firefox / 打包（无 File System Access API）模式：跨域 fetch 的 resp.body 在 Firefox
+                // content script 下是 Xray 包裹的 ReadableStream，构造 new Response(resp.body) 会在收尾时
+                // 触碰其底层 abort/close 控制器 → 抛 "Permission denied to access property 'abort'"，且
+                // Firefox 的安全错误常绕过 promise 捕获直接打到控制台。
+                // 改用 resp.arrayBuffer()（跨 compartment 允许的数据提取方法，返回普通 ArrayBuffer），
+                // 不碰 resp.body 的底层流，彻底规避 Xray；字节交 writer 收集进内存 ZIP。
+                const buf = resp.body ? await resp.arrayBuffer() : new ArrayBuffer(0);
+                await this.writer.writeFile(new Uint8Array(buf), filepath);
+                if (total) {
+                    reporter.onProgress?.(total, total);
+                }
+                reporter.onState?.('complete');
+            }
             return { trackerId: 'disk_' + req.id };
         } catch {
             return null; // 抛错 → 回退代理

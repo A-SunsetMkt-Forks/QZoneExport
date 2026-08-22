@@ -55,7 +55,7 @@ sections = [
             "导出格式全局统一：不再为每个模块单独设置 HTML / MarkDown，统一在公共配置中选择一处即可（查看器内仍可按需切换展示方式并记忆）。",
             "媒体处理独立为开关：原「用 QQ空间外链（不下载）」是下载方式的一种取值，现独立为「媒体处理：下载到本地 / 使用QQ空间外链」。",
             "日志视图类开关移除：原「日志视图（列表/摘要）」「内容展示方式（表格/列表）」等展示类开关移除，改为在查看器内按需切换并记忆。日志默认按「摘要」展示，旧备份若没有摘要会自动回退为列表。",
-            "打包方式下拉移除：备份产出方式由运行环境决定——支持 File System Access API 的浏览器（Chrome / Edge）直接写入本地目录；暂不支持的浏览器自动打包为 ZIP。",
+            "打包方式下拉移除：备份产出方式由运行环境决定——支持 File System Access API 的浏览器（Chrome / Edge）直接写入你选择的本地目录；Firefox 经浏览器下载器直写下载目录。统一不再打包 ZIP。",
             "说说「获取全文 / 展开全文」开关移除：全文采集已内置，不再作为单独开关。",
             "地图 Key 配置精简：移除百度、高德地图 Key，仅保留腾讯地图 Key（用于坐标转描述）。",
             "进度口径调整：去除「跳过」概念，跳过项统一按成功计入进度（仅影响进度展示口径，不影响实际备份内容）。",
@@ -78,7 +78,7 @@ sections = [
         "items": [
             "复核个人配置：部分设置项在新版中重新组织或被移除（见「三、配置与行为变更」）。旧版个别配置可能无法直接沿用——尤其是 Aria2 地址与端口、好友特殊分组、各模块增量备份开关、媒体处理方式等。建议升级前先截图记录你的自定义项，升级后在新设置页逐项确认一次。",
             "备份产物兼容：旧版导出的备份文件仍可打开；但看板、互动分析等新功能依赖新结构，建议用新版重新备份一次以获得完整体验。",
-            "浏览器支持与备份产物：V3 目前仅支持 Chrome / Edge 等 Chromium 内核浏览器，备份直接写入你选择的本地目录；Firefox 等浏览器的支持将在后续阶段加入。",
+            "浏览器支持与备份产物：V3 现已支持 Chrome / Edge 等 Chromium 内核浏览器与 Firefox（Manifest V3）。Chrome / Edge 备份写入你选择的本地目录；Firefox 备份自动写入「下载目录 / QQ空间备份_&lt;uin&gt;/」。",
             "首次使用引导：升级后在 QQ 空间内点击扩展图标会重新触发新手引导。",
             "历史卡顿自愈：若曾因长期使用累积数据导致浏览器卡顿，新版首次启动会自动清理，一般无需手动处理。",
         ],
@@ -241,7 +241,7 @@ svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewB
   {chr(10).join(parts)}
 </svg>'''
 
-out = r"E:\Projects\Licfe\GitHub\QZoneExport\docs\release-notes-v3-poster.svg"
+out = r"E:\Projects\Licfe\GitHub\QZoneExport\resources\release\release-notes-v3-poster.svg"
 with open(out, "w", encoding="utf-8") as f:
     f.write(svg)
 

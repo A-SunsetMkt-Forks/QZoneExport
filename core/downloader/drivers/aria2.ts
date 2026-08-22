@@ -53,9 +53,9 @@ export class Aria2Driver implements DownloadDriver {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
                 });
-                if (!resp.ok) throw new Error(`Aria2 RPC HTTP ${resp.status}`);
+                if (!resp.ok) throw new Error(`Aria2 RPC HTTP ${resp.status}`, { cause: e });
                 const json: any = await resp.json();
-                if (json.error) throw new Error(`Aria2 error: ${json.error.message || JSON.stringify(json.error)}`);
+                if (json.error) throw new Error(`Aria2 error: ${json.error.message || JSON.stringify(json.error)}`, { cause: e });
                 return json.result;
             }
             throw e;

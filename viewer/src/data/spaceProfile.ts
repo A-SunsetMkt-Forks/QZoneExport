@@ -20,7 +20,7 @@ export interface ProfileRow {
 /** 去除 QQ 空间签名的 BBcode 标签（[url=][ft=][I] 等），仅保留纯文本 */
 export function stripBBCode(s: string): string {
     return s
-        .replace(/\[[\/]?[a-zA-Z][^\]]*\]/g, '')
+        .replace(/\[[/]?[a-zA-Z][^\]]*\]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 }

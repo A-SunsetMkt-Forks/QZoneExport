@@ -48,12 +48,14 @@ export const SUBJECT_CONFIG: Record<string, string[]> = {
     Blogs: ['list', 'contents'],
     Diaries: ['list', 'contents'],
     Boards: ['list'],
-    Friends: ['friendship', 'zone-access'],
     Photos: ['albums'],
     Videos: ['list'],
     Favorites: ['list'],
     Shares: ['list'],
     Visitors: ['list'],
+    // Friends：互动(互动信息)与权限(空间访问权限)顺序执行，collector 合并上报同一 body 阶段
+    // （总=2×新好友数、done 单调递增），单阶段不走 min-over-started，阶段切换时进度不倒退。
+    Friends: ['friendship'],
 };
 
 /**

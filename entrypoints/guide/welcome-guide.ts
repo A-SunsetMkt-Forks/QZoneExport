@@ -1,3 +1,5 @@
+import '../../core/shared/polyfill';
+
 /**
  * 欢迎页引导系统
  */
@@ -46,37 +48,42 @@
     const guideSteps: GuideStep[] = [
         {
             title: '👋 欢迎使用！',
-            body: '本引导将带你快速了解页面结构，大约 <strong>30 秒</strong>即可完成。你可以随时点击「跳过引导」关闭。',
+            body: '本引导带你快速熟悉页面，约 <strong>30 秒</strong>即可完成。随时可点「跳过引导」。',
             target: null,
         },
         {
             title: '📋 三步完成备份',
-            body: '整个备份流程分为三步：<strong>打开空间 → 自动弹出备份窗口 → 选择内容开始备份</strong>。左侧是详细说明，右侧是核心概念解释。',
+            body: '流程：<strong>打开空间 → 自动弹出备份窗口 → 选择内容开始备份</strong>。左侧是步骤，右侧是核心概念。',
             target: '#guide-steps',
         },
         {
-            title: '💡 什么是文案和媒体？',
-            body: '<strong>文案</strong>指说说文字、日志、好友列表等文本数据，采集即得。<br><strong>媒体</strong>指照片、视频等文件，需额外下载。',
+            title: '💡 文案与媒体',
+            body: '<strong>文案</strong>（说说文字、日志、好友列表等）采集即得；<strong>媒体</strong>（照片、视频等文件）需额外下载。',
             target: '#guide-concepts',
         },
         {
             title: '🎯 选择备份范围',
-            body: '支持三种备份范围：<strong>全部数据</strong>（首次推荐）、<strong>上次之后</strong>（增量备份）、<strong>指定时间</strong>（按需备份）。',
+            body: '支持<strong>全部数据</strong>（首次推荐）、<strong>上次之后</strong>（增量）、<strong>指定时间</strong>（按需）三种。',
             target: '#guide-scope',
         },
         {
             title: '📦 默认配置组合',
-            body: '首次使用推荐采用<strong>默认配置组合</strong>：HTML 格式 + 全量备份 + 助手直写目录。',
+            body: '首次推荐<strong>默认配置组合</strong>：HTML 格式 + 全量备份 + 媒体「助手直写目录」（Firefox 默认「浏览器下载器」）。',
             target: '#guide-default',
         },
         {
-            title: '⚙️ 调整配置',
-            body: '如需更灵活的配置（如增量备份「上次之后」、改用 Aria2协议下载器 等），可点击下方的<strong>「打开配置页面」</strong>自定义。',
-            target: '#guide-default',
+            title: '🌐 浏览器差异',
+            body: 'Chrome / Edge 与 Firefox 的<strong>保存位置</strong>和<strong>下载方式</strong>不同（Firefox 无「助手直写目录」，文案直写下载目录）。',
+            target: '#guide-browsers',
+        },
+        {
+            title: '💡 查看与提示',
+            body: '底部提示介绍了备份后的<strong>查看方式</strong>与「浏览器下载器」的注意事项。',
+            target: '#guide-tip',
         },
         {
             title: '🚀 开始使用',
-            body: '准备好了吗？点击下方的<strong>「去 QQ 空间备份」</strong>按钮前往空间页面开始备份。<br>如有疑问，可随时点击<strong>「打开配置页面」</strong>调整设置。',
+            body: '准备好后点击下方<strong>「去 QQ 空间备份」</strong>即可开始，或进入<strong>设置</strong>进一步调整。',
             target: '#guide-actions',
         },
     ];
@@ -185,7 +192,7 @@
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.openOptionsPage) {
             chrome.runtime.openOptionsPage();
         } else {
-            let url = '';
+            let url: string;
             if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
                 url = chrome.runtime.getURL('options.html');
             } else {

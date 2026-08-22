@@ -6,7 +6,6 @@ import {
     friendCommonCount,
     friendDisplayName,
     friendNick,
-    messageUrl,
 } from '../../data/content';
 import UserAvatar from '../UserAvatar.vue';
 
@@ -25,6 +24,8 @@ const props = defineProps<{ item: Record<string, any> }>();
                 <span v-html="formatSummary(friendDisplayName(props.item))"></span>
                 <n-tag v-if="props.item.care" size="tiny" :bordered="false" type="warning">特别关心</n-tag>
                 <n-tag v-if="props.item.isFriend === 0" size="tiny" :bordered="false">已不是好友</n-tag>
+                <n-tag v-if="props.item.access === false" size="tiny" :bordered="false" type="error">无权限</n-tag>
+                <n-tag v-else-if="props.item.access === true" size="tiny" :bordered="false" type="success">可访问</n-tag>
             </div>
             <!-- 有备注时主名显示的是备注，昵称在此补上，否则看不到对方叫什么 -->
             <div v-if="props.item.remark && friendNick(props.item)" class="friend-nick">
@@ -38,13 +39,6 @@ const props = defineProps<{ item: Record<string, any> }>();
                 <span v-if="friendCommonCount(props.item)">共同好友 {{ friendCommonCount(props.item) }}</span>
             </div>
         </div>
-        <!-- 发起聊天（旧列表页有这个入口） -->
-        <a
-            v-if="props.item.uin"
-            class="chat-link friend-chat"
-            :href="messageUrl(props.item.uin)"
-            title="发起 QQ 聊天"
-        >聊天</a>
     </div>
 </template>
 
@@ -89,8 +83,5 @@ const props = defineProps<{ item: Record<string, any> }>();
     margin-top: 4px;
     color: var(--text-muted);
     font-size: 12px;
-}
-.friend-chat {
-    flex: none;
 }
 </style>

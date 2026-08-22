@@ -2,85 +2,49 @@
  * 统一文件写入层（替代旧 api.js writeText / createFolder / switchToRoot
  * 与 common.js writeJsonToJs）
  *
- * 双后端：
- *  - DiskFS 模式：用户已选目录，直接写盘（File System Access API）
- *  - ZIP 模式：未选目录，收集进内存归档（最终由 zip-fallback / zip-writer 打包）
- *
- * 旧版用 QZone.Common.Filer 作为 ZIP 模式的临时文件系统兜底；这里改为内存收集，
- * 与 core/archive 的流式 ZIP 衔接，避免引入旧 polyfill。
+ * 双后端（ZipCollector 内存归档已于 2026-08-22 下线：Chrome 恒直写目录、
+ * Firefox 形态 B 恒 downloads 直写，打包 ZIP 功能全面失效，见 firefox-mv3 分支记录）：
+ *  - DiskFS 模式：用户已选目录，直接写盘（File System Access API，Chrome/Edge）
+ *  - Downloads 模式：Firefox 形态 B——经 background downloads.download 直写下载目录
+ *    （下载目录/QQ空间备份_<uin>/），内存=单文件
+ *  - 两者皆不可用（diskEnabled=false 且未装配 DownloadsBackend）→ 显式抛错。
+ *    替代旧「静默收集进内存 ZIP」兜底（该兜底在 waitForDirectory 阻塞下永不触发，
+ *    且静默收集反而可能在收尾时丢数据，显式报错更安全）
  */
 
 import { DiskFS } from './disk-fs';
 import type { ChunkSink } from './disk-fs';
-import type { StreamingZipWriter } from '../archive/zip-writer';
-
-export interface ZipEntry {
-    path: string;
-    data: Uint8Array | string;
-}
-
-/** 内存归档收集器（ZIP 模式使用） */
-export class ZipCollector {
-    private readonly entries: ZipEntry[] = [];
-    /**
-     * 已收集且内容非空的路径索引。
-     * 仅为 has() 提供 O(1) 判定——条目数可达数万（媒体文件），线性扫描不可接受。
-     */
-    private readonly nonEmptyPaths = new Set<string>();
-
-    add(path: string, data: Uint8Array | string): void {
-        this.entries.push({ path, data });
-        const empty = typeof data === 'string' ? data.length === 0 : data.byteLength === 0;
-        if (!empty) {
-            this.nonEmptyPaths.add(path);
-        }
-    }
-
-    /** 是否已收集该路径且内容非空（与 DiskFS.exists 语义对齐） */
-    has(path: string): boolean {
-        return this.nonEmptyPaths.has(path);
-    }
-
-    getEntries(): readonly ZipEntry[] {
-        return this.entries;
-    }
-
-    get size(): number {
-        return this.entries.length;
-    }
-
-    clear(): void {
-        this.entries.length = 0;
-        this.nonEmptyPaths.clear();
-    }
-
-    /** 把所有收集到的条目写入流式 ZIP writer */
-    async flushTo(zip: StreamingZipWriter): Promise<void> {
-        for (const entry of this.entries) {
-            const bytes =
-                typeof entry.data === 'string'
-                    ? new TextEncoder().encode(entry.data)
-                    : entry.data;
-            await zip.addFile(entry.path, bytes);
-        }
-    }
-}
+import { DownloadsBackend } from './downloads-writer';
 
 export class FileWriter {
     private readonly disk: DiskFS;
-    private readonly zip: ZipCollector;
-    /** 当前根目录名称（用于 ZIP 模式下的顶层目录前缀） */
+    /**
+     * Downloads 后端（仅 Firefox 形态 B：无 FS Access + 无 SW 流式，文案/查看器
+     * 经 downloads.download 直写下载目录），内存=单文件。
+     */
+    private readonly downloads?: DownloadsBackend;
+    /** 当前根目录名称（如 QQ空间备份_<uin>，用于下载目录顶层路径包裹） */
     private rootFolderName = '';
 
-    constructor(disk: DiskFS, zip: ZipCollector, rootFolderName = '') {
+    constructor(disk: DiskFS, rootFolderName = '', downloads?: DownloadsBackend) {
         this.disk = disk;
-        this.zip = zip;
         this.rootFolderName = rootFolderName;
+        this.downloads = downloads;
     }
 
     /** 是否走直写盘（已选目录） */
     get diskEnabled(): boolean {
         return this.disk.isEnabled();
+    }
+
+    /** 是否走 downloads 直写（Firefox：未选盘但有 DownloadsBackend） */
+    get downloadsEnabled(): boolean {
+        return !this.diskEnabled && !!this.downloads;
+    }
+
+    /** 是否有可用的落盘后端（无 → 所有写操作抛错，防静默丢数据） */
+    get writable(): boolean {
+        return this.diskEnabled || !!this.downloads;
     }
 
     setRootFolderName(name: string): void {
@@ -100,7 +64,14 @@ export class FileWriter {
         return this.rootFolderName + '/' + clean;
     }
 
-    /** 确保目录存在（DiskFS 模式：逐级创建；ZIP 模式：无需操作） */
+    /** 无可用后端时显式报错（替代旧「静默收集进内存 ZIP」的兜底） */
+    private assertWritable(): void {
+        if (!this.writable) {
+            throw new Error('未选择备份保存目录，备份无法写入（请先选择保存目录后再开始备份）');
+        }
+    }
+
+    /** 确保目录存在（DiskFS 模式：逐级创建；downloads 模式：无需操作，下载自动建目录） */
     async createFolder(path: string): Promise<void> {
         if (!this.diskEnabled) {
             return;
@@ -119,7 +90,11 @@ export class FileWriter {
             await this.disk.write(full, text);
             return;
         }
-        this.zip.add(full, text);
+        if (this.downloads) {
+            await this.downloads.writeText(text, full);
+            return;
+        }
+        this.assertWritable();
     }
 
     /** 写二进制数据 */
@@ -129,12 +104,14 @@ export class FileWriter {
             await this.disk.write(full, data);
             return;
         }
-        if (data instanceof Blob) {
-            const buf = await data.arrayBuffer();
-            this.zip.add(full, new Uint8Array(buf));
-        } else {
-            this.zip.add(full, data);
+        if (this.downloads) {
+            const bytes = data instanceof Blob
+                ? new Uint8Array(await data.arrayBuffer())
+                : data;
+            await this.downloads.writeBytes(bytes, full);
+            return;
         }
+        this.assertWritable();
     }
 
     /** 文件是否已写入且非空（两种后端语义一致）
@@ -145,7 +122,10 @@ export class FileWriter {
         if (this.diskEnabled) {
             return this.disk.exists(full);
         }
-        return this.zip.has(full);
+        if (this.downloads) {
+            return this.downloads.hasWritten(full);
+        }
+        return false;
     }
 
     /** 写数据文件：window.<global> = <data> */
@@ -165,7 +145,7 @@ export class FileWriter {
     }
 
     /**
-     * 流式写文件（大文件不驻留内存）；ZIP 模式退化为内存收集（与原行为一致）
+     * 流式写文件（大文件不驻留内存）；downloads 模式退化为内存收集后整包写入（文案单文件小，内存可控）
      */
     async writeStreamFile(path: string, stream: ReadableStream<Uint8Array>): Promise<void> {
         const full = this.fullPath(path);
@@ -174,13 +154,17 @@ export class FileWriter {
             return;
         }
         const buf = await new Response(stream as unknown as BodyInit).arrayBuffer();
-        this.zip.add(full, new Uint8Array(buf));
+        if (this.downloads) {
+            await this.downloads.writeBytes(new Uint8Array(buf), full);
+            return;
+        }
+        this.assertWritable();
     }
 
     /**
      * 开启逐块写入槽（background 代理分块下载用：每收一块即 append 落盘，不重建流 /
      * 不一次性 base64 整文件，内存恒定、大文件无上限）。
-     * Disk 模式委托 DiskFS.chunkSink；ZIP 模式先内存累积、close 时合并 add（与 writeStreamFile 退化一致）。
+     * Disk 模式委托 DiskFS.chunkSink；downloads 模式先内存累积、close 时整包写入。
      */
     async openChunkSink(path: string): Promise<ChunkSink> {
         const full = this.fullPath(path);
@@ -202,7 +186,11 @@ export class FileWriter {
                     merged.set(c, off);
                     off += c.length;
                 }
-                this.zip.add(full, merged);
+                if (this.downloads) {
+                    await this.downloads.writeBytes(merged, full);
+                    return;
+                }
+                this.assertWritable();
             },
         };
     }

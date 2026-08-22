@@ -151,6 +151,14 @@ export function renderStats(ctx: PanelContext): void {
         }
         if (ctx.ovProgressNote) {
             ctx.ovProgressNote.innerHTML = buildProgressNote(totalCnt, okCnt, failedCnt, pct, isSettled, finished);
+            // Firefox 形态 B：文案/查看器落盘进度（写文件 N/M）
+            const mw = (dm && typeof dm.getMetaWriteProgress === 'function') ? dm.getMetaWriteProgress() : null;
+            if (mw && mw.total > 0) {
+                const extra = document.createElement('div');
+                extra.className = 'ov-meta-write';
+                extra.textContent = '✍️ 写文案文件 ' + mw.done + '/' + mw.total;
+                ctx.ovProgressNote.appendChild(extra);
+            }
         }
     } else {
         // DM 不可用时（面板先于引擎挂载 / 备份中途 clear）重置进度显示，
@@ -347,8 +355,8 @@ function buildModuleBarData(mod: string, st: ModState): ModuleBarData {
             pct = 0; // 已开始但尚无 phase 计数时不渲染假进度；处理中状态由徽标文案体现
         }
     }
-    let statusClass = st.status === 'done' ? 'done' : st.status === 'fail' ? 'fail' : st.status === 'active' ? 'active' : '';
-    let badgeClass = '', badgeText = '';
+    const statusClass = st.status === 'done' ? 'done' : st.status === 'fail' ? 'fail' : st.status === 'active' ? 'active' : '';
+    let badgeClass: string, badgeText: string;
     if (st.status === 'done') { badgeClass = 'stg-ok'; badgeText = MODULE_STATUS_LABEL.done || ''; }
     else if (st.status === 'fail') { badgeClass = 'stg-err'; badgeText = MODULE_STATUS_LABEL.fail || ''; }
     else if (st.status === 'active' && st.currentPhaseLabel) { badgeClass = 'stg-run'; badgeText = st.currentPhaseLabel || ''; }

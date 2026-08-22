@@ -10,11 +10,11 @@ import {
     friendCommonCount,
     friendDisplayName,
     friendNick,
-    messageUrl,
 } from '../data/content';
 import ThatYearToday from '../components/ThatYearToday.vue';
 import FriendItem from '../components/items/FriendItem.vue';
 import UserAvatar from '../components/UserAvatar.vue';
+import UserLink from '../components/UserLink.vue';
 
 /**
  * 好友列表（数据来自 Friends/json/friends.js）
@@ -268,7 +268,7 @@ function commonGroupNames(row: Record<string, any>): string {
 
 const columns: DataTableColumns<Record<string, any>> = [
     { title: '', key: 'avatar', width: 52, render: (row) => h(UserAvatar, { uin: row.uin, size: 32, link: false }) },
-    { title: 'QQ', key: 'uin', width: 110 },
+    { title: 'QQ', key: 'uin', width: 110, render: (row) => h(UserLink, { uin: row.uin }, { default: () => String(row.uin) }) },
     {
         title: '昵称',
         key: 'nick',
@@ -312,6 +312,17 @@ const columns: DataTableColumns<Record<string, any>> = [
         render: (row) => row.intimacyScore || 0,
     },
     {
+        title: '访问权限',
+        key: 'access',
+        width: 90,
+        align: 'center',
+        render: (row) => {
+            if (row.access === false) return h(NTag, { size: 'small', type: 'error', bordered: false }, { default: () => '无权限' });
+            if (row.access === true) return h(NTag, { size: 'small', type: 'success', bordered: false }, { default: () => '可访问' });
+            return '—'; // 未开启权限探测或无该字段
+        },
+    },
+    {
         title: '共同好友',
         key: 'commonFriend',
         width: 100,
@@ -324,16 +335,6 @@ const columns: DataTableColumns<Record<string, any>> = [
         key: 'commonGroup',
         ellipsis: { tooltip: true },
         render: (row) => commonGroupNames(row),
-    },
-    {
-        // 旧表格页的「QQ通讯」列：点一下就能拉起 QQ 聊天窗口
-        title: '聊天',
-        key: 'message',
-        width: 80,
-        align: 'center',
-        render: (row) => (row.uin
-            ? h('a', { href: messageUrl(row.uin), title: '发起 QQ 聊天', class: 'chat-link' }, '聊天')
-            : ''),
     },
 ];
 </script>

@@ -602,6 +602,20 @@ export class DownloadManager {
         return s;
     }
 
+    /* ===================== Firefox 形态 B：文案/查看器落盘进度 ===================== */
+
+    private metaWrite: { done: number; total: number } | null = null;
+
+    /** 文案/查看器落盘进度（写文件 N/M），供进度面板注脚展示 */
+    setMetaWriteProgress(done: number, total: number): void {
+        this.metaWrite = { done: Math.max(0, done), total: Math.max(0, total) };
+        this._markStatsDirty();
+    }
+
+    getMetaWriteProgress(): { done: number; total: number } | null {
+        return this.metaWrite;
+    }
+
     /* ===================== 提交下载 ===================== */
     async submitTask(id: string): Promise<void> {
         const task = this.tasks.get(id);

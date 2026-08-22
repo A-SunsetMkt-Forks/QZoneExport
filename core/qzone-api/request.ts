@@ -252,7 +252,7 @@ export class Requester {
             return await fetchFn(url, { method: 'GET', credentials: 'include', signal: controller.signal });
         } catch (error: any) {
             if (error && error.name === 'AbortError') {
-                throw new Error('接口请求超时（' + timeoutSec + '秒）');
+                throw new Error('接口请求超时（' + timeoutSec + '秒）', { cause: error });
             }
             throw error;
         } finally {

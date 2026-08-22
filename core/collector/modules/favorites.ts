@@ -174,7 +174,7 @@ export class FavoritesCollector implements ModuleCollector {
     async collect(_ctx: CollectContext): Promise<void> {
         const env = this.env;
         const cfg = env.config.Favorites;
-        let items = await this.runCollection(_ctx, false);
+        const items = await this.runCollection(_ctx, false);
 
         // 导出数据文件
         await env.report('export', 0, 1);

@@ -2,9 +2,7 @@
  * QQ空间Rest API地址（移植自 src/js/api.js REST_URLS，逐项等价）
  */
 export const REST_URLS = {
-    /** 空间概览信息，可用于判断权限 */
-    USER_OVERVIEW_URL: 'https://user.qzone.qq.com/proxy/domain/r.qzone.qq.com/cgi-bin/main_page_cgi',
-    /** 个人信息 */
+    /** 个人信息 url */
     USER_INFO_URL: 'https://user.qzone.qq.com/proxy/domain/base.qzone.qq.com/cgi-bin/user/cgi_userinfo_get_all',
     /** 说说列表URL */
     MESSAGES_LIST_URL: 'https://user.qzone.qq.com/proxy/domain/taotao.qq.com/cgi-bin/emotion_cgi_msglist_v6',

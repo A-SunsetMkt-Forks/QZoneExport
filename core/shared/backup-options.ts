@@ -42,25 +42,12 @@ export interface SelectOption {
 }
 
 /**
- * 备份产出方式：由运行环境能力决定，用户无需手动选择（原「打包方式」下拉选项已废弃）。
- * - 浏览器支持 File System Access API（Chrome/Edge）→ 直写本地目录（'Directory'）
- * - 不支持（Firefox 等）→ 自动回退为打包下载 ZIP（'Zip'）
- * 历史上手动选 ZIP 时门控仍被 DiskFS.isSupported()（Chrome 恒 true）强行拉回目录分支，
- * 导致「设了 ZIP 却直写盘、从不生成压缩包」的 bug；改为环境驱动后该选项已无存在必要。
+ * 备份产出方式：由运行环境能力决定，用户无需手动选择（「打包方式」/ ZIP 压缩包已整体下线）。
+ * - 浏览器支持 File System Access API（Chrome/Edge）→ 直写本地目录
+ * - 不支持（Firefox）→ 经 DownloadsBackend 直写下载目录
+ * 历史上「手动选 ZIP」的门控 bug 已随 Zip 功能下线和环境驱动方案一并消除，
+ * 现在两种后端都直接落盘，不再有「打包下载 ZIP」的产物形态。
  */
-export type ExportMode = 'Directory' | 'Zip';
-export const EXPORT_MODE_DIRECTORY: ExportMode = 'Directory';
-export const EXPORT_MODE_ZIP: ExportMode = 'Zip';
-
-/** 纯函数（便于单测）：传入运行环境是否支持直写本地目录，返回应采用的产出方式 */
-export function resolveExportMode(diskSupported: boolean): ExportMode {
-    return diskSupported ? EXPORT_MODE_DIRECTORY : EXPORT_MODE_ZIP;
-}
-
-/** 产出方式 → 展示文案（供 popup 摘要等展示） */
-export function exportModeLabel(mode: ExportMode): string {
-    return mode === EXPORT_MODE_DIRECTORY ? '写入本地目录' : '打包下载 ZIP';
-}
 
 /** 媒体处理选项：Download=下载到本地；Link=不下载、内容直接引用外链 */
 export const MEDIA_MODE_OPTIONS: SelectOption[] = [
@@ -78,6 +65,22 @@ export const DOWNLOAD_TYPE_OPTIONS: SelectOption[] = [
     { label: '浏览器下载器', value: 'Browser' },
     { label: 'Aria2协议下载器', value: 'Aria2' },
 ];
+
+/**
+ * 下载方式选项按运行环境过滤：
+ * - Firefox：不支持 File System Access API，「助手直写目录」(Disk) 不可用 → 过滤掉，只留 Browser/Aria2。
+ *   媒体/文案/查看器统一走 downloads.download 直写下载目录（形态 B：下载目录/QQ空间备份_<uin>/）。
+ * - Chrome/Edge：全量保留。
+ */
+export function downloadTypeOptionsFor(isFirefox: boolean): SelectOption[] {
+    if (!isFirefox) return DOWNLOAD_TYPE_OPTIONS;
+    return DOWNLOAD_TYPE_OPTIONS.filter((opt) => opt.value !== 'Disk');
+}
+
+/** 默认媒体下载方式：Firefox='Browser'（直写目录不可用），Chrome='Disk' */
+export function defaultDownloadTypeFor(isFirefox: boolean): string {
+    return isFirefox ? 'Browser' : DEFAULT_DOWNLOAD_TYPE;
+}
 
 /** 媒体走外链（不下载）时的统一摘要文案 */
 export const MEDIA_LINK_TEXT = '不下载，用QQ空间外链';
@@ -138,7 +141,7 @@ export const COMMON_DEFAULTS = {
     downloadThread: 10,
     // 条目级明细（评论/点赞/访客）采集最大并发数：避免单页条目裸 Promise.all 打爆接口与浏览器。
     // 接口易限流的大号可调小（如 3），求快可调大（上限视 Options 输入，建议不超过 30）。
-    itemDetailConcurrency: 20,
+    itemDetailConcurrency: 15,
     downloadSleep: 2,
     hasUserLink: true,
 

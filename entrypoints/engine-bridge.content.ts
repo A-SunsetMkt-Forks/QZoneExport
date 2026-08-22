@@ -1,3 +1,4 @@
+import '../core/shared/polyfill';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { initContext } from '../core/qzone-api/context';
 import { albumList, diaryList } from '../core/qzone-api/clients';
@@ -5,7 +6,7 @@ import { serializeParams } from '../core/qzone-api/request';
 import { BG_MSG } from '../core/shared/messages';
 import { loadConfig as loadCoreConfig } from '../core/shared/config';
 import { Logger } from '../core/shared/logger';
-import { resolveExportMode, DEFAULT_DOWNLOAD_TYPE } from '../core/shared/backup-options';
+import { DEFAULT_DOWNLOAD_TYPE, defaultDownloadTypeFor } from '../core/shared/backup-options';
 import { toJson } from '../core/shared/utils';
 import { CheckpointStore } from '../core/collector/checkpoint';
 import { PageLedger, DetailManager } from '../core/collector/reliability';
@@ -18,13 +19,13 @@ import type { MediaTask, QzoneBackupConfig } from '../core/collector/modules/typ
 import { Requester, type RetryConfig } from '../core/qzone-api/request';
 import { BackupDb, type ModuleBackupRow } from '../core/store/backup-db';
 import { DiskFS } from '../core/fs/disk-fs';
-import { FileWriter, ZipCollector } from '../core/fs/writer';
+import { FileWriter } from '../core/fs/writer';
+import { DownloadsBackend } from '../core/fs/downloads-writer';
 import { autoFileSuffix } from '../core/net/suffix';
 import { installDownloadManager, type DownloadManager } from '../core/downloader/manager';
 import { exportModuleMarkdown, resetMarkdownRootIndex } from '../core/export/markdown';
 import { exportOthers, type UserInfo, type ViewerExportResult } from '../core/export/site';
 import { fetchTargetUserInfo, mergeTargetUserInfo } from '../core/export/user-info';
-import { inMemoryZip } from '../core/archive/zip-fallback';
 
 // content script 通过 window 上的全局变量与注入面板/引擎通信，补充索引签名以合法访问
 declare global {
@@ -36,8 +37,19 @@ declare global {
 /* ===== 全局共享状态 ===== */
 
 const sharedDisk = new DiskFS();
-const sharedZip = new ZipCollector();
-const sharedWriter = new FileWriter(sharedDisk, sharedZip, '');
+// 形态 B（Firefox）：无 File System Access + 任何上下文无 SW 流式（探针实锤），
+// 文案/查看器经 downloads.download 直写下载目录（下载目录/QQ空间备份_<uin>/），内存=单文件。
+// 仅 Firefox 装配 Downloads 后端；Chrome 走 DiskFS 直写盘（ZipCollector 已下线，见 writer.ts）。
+const isFirefox = import.meta.env.FIREFOX;
+const downloadsBackend: DownloadsBackend | null = isFirefox
+    ? new DownloadsBackend({
+        // 文案/查看器落盘进度并入媒体进度面板（写文件 N/M），用户拍板
+        onProgress: (done, total) => {
+            try { ensureDm().setMetaWriteProgress(done, total); } catch { /* 进度上报失败不影响写盘 */ }
+        },
+    })
+    : null;
+const sharedWriter = new FileWriter(sharedDisk, '', downloadsBackend || undefined);
 let sharedDm: DownloadManager | null = null;
 const sharedCheckpointStore = new CheckpointStore();
 /**
@@ -179,7 +191,7 @@ async function callAria2Rpc(
                 headers: { 'Content-Type': 'application/json' },
                 body,
             });
-            if (!res.ok) throw new Error(`Aria2 RPC HTTP ${res.status}`);
+            if (!res.ok) throw new Error(`Aria2 RPC HTTP ${res.status}`, { cause: e });
             const json = (await res.json()) as { result?: unknown; error?: { message?: string } };
             return json ?? null;
         }
@@ -199,8 +211,10 @@ interface PrecheckResult {
  */
 async function preCheckDownloader(): Promise<PrecheckResult> {
     const cfg = (qzoneConfig.Common || {}) as Record<string, unknown>;
-    // 配置缺失时按默认下载方式兜底（当前默认「助手直写目录」，勿再硬编码 Browser）
-    const downloadType = String(cfg.downloadType || DEFAULT_DOWNLOAD_TYPE);
+    // 配置缺失时按默认下载方式兜底；Firefox 下直写目录(Disk)不可用，默认浏览器下载器
+    const rawType = String(cfg.downloadType || defaultDownloadTypeFor(isFirefox));
+    // Firefox 形态 B：直写目录不可用 → 归一化为浏览器下载器
+    const downloadType = isFirefox && rawType === 'Disk' ? 'Browser' : rawType;
     const mediaMode = String(cfg.mediaMode || '');
 
     if (mediaMode === 'Link' || downloadType === 'Disk') return { ok: true, message: '下载器预检通过：当前模式无需下载器' };
@@ -375,15 +389,21 @@ async function runBackup(
         }
 
         const usingDiskExport = sharedDisk.isEnabled();
+        // 形态 B（Firefox）：等文案/查看器落盘队列排空，确保全部文件已写入下载目录再提示完成
+        if (downloadsBackend && downloadsBackend.pendingCount > 0) {
+            logBackup('INFO', targetUin, `收尾 | 等待 ${downloadsBackend.pendingCount} 个文案文件落盘…`);
+            await downloadsBackend.flush();
+        }
         const commonCfg = (qzoneConfig.Common || {}) as Record<string, unknown>;
         const mediaDownloader = String(commonCfg.downloadType || DEFAULT_DOWNLOAD_TYPE);
         // 外链模式（mediaMode=Link）媒体不下载、内容直接引用QQ空间外链，不存在需要合并的本地文件
         const mediaLinkMode = String(commonCfg.mediaMode || '') === 'Link';
         // 目录导出且媒体由外部下载器（浏览器/aria2）拉取时，才需要把外部文件合并回备份目录
         const needMerge = usingDiskExport && mediaDownloader !== 'Disk' && !mediaLinkMode;
-        logBackup('INFO', targetUin, `收尾阶段 | 导出方式=${usingDiskExport ? 'directory' : 'zip'} | 媒体下载器=${mediaDownloader} | 外链模式=${mediaLinkMode} | 需合并外部文件=${needMerge}`);
+        logBackup('INFO', targetUin, `收尾阶段 | 导出方式=${usingDiskExport ? 'directory' : 'downloads'} | 媒体下载器=${mediaDownloader} | 外链模式=${mediaLinkMode} | 需合并外部文件=${needMerge}`);
         panel.complete?.({
-            mode: usingDiskExport ? 'directory' : 'zip',
+            mode: usingDiskExport ? 'directory' : 'downloads',
+            downloadsMode: !!downloadsBackend,
             needMerge,
             mediaLinkMode,
         });
@@ -438,6 +458,8 @@ async function createHost(targetUin: number): Promise<BackupHost> {
     const commonCfg = (qzoneConfig.Common || {}) as Record<string, unknown>;
     dm.setConcurrencyLimit(Number(commonCfg.downloadThread) || 10);
     dm.setSubmitIntervalMs((Number(commonCfg.downloadSleep) || 0) * 1000);
+    // 文案落盘并发与媒体共享 downloadThread（用户拍板）
+    downloadsBackend?.setConcurrency(Number(commonCfg.downloadThread) || 10);
     const globalTarget = window as unknown as Record<string, unknown>;
     return {
         async writeJsonToJs(global, data, path) {
@@ -453,7 +475,9 @@ async function createHost(targetUin: number): Promise<BackupHost> {
             try {
                 if (dm && typeof dm.upsert === 'function') {
                     const cfg = (globalTarget['QZone_Config'] || {}) as Record<string, Record<string, unknown>>;
-                    const dt = String((cfg.Common && cfg.Common.downloadType) || DEFAULT_DOWNLOAD_TYPE);
+                    const rawDt = String((cfg.Common && cfg.Common.downloadType) || DEFAULT_DOWNLOAD_TYPE);
+                    // Firefox 下直写目录(Disk)不可用 → 归一化为 browser
+                    const dt = isFirefox && rawDt === 'Disk' ? 'Browser' : rawDt;
                     const trackerType: 'browser' | 'disk' | 'aria2' =
                         dt === 'Aria2' ? 'aria2' : dt === 'Disk' ? 'disk' : 'browser';
                     if (trackerType === 'aria2' && !aria2Configured) {
@@ -549,16 +573,6 @@ export default defineContentScript({
         const globalTarget = window as unknown as Record<string, unknown>;
         ensureDm();
 
-        const saveBlob = (blob: Blob, filename: string): void => {
-            try {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = filename; a.rel = 'noopener'; a.style.display = 'none';
-                document.body.appendChild(a); a.click();
-                setTimeout(() => { try { URL.revokeObjectURL(url); a.remove(); } catch { /* ignore */ } }, 1000);
-            } catch (e) { console.error('触发文件下载失败', filename, e); }
-        };
-
         /* ===== __QZ_BACKUP_API__ ===== */
         globalTarget['__QZ_BACKUP_API__'] = {
             async selectRoot(): Promise<string> {
@@ -581,14 +595,7 @@ export default defineContentScript({
                     uin as number | string | undefined,
                 );
             },
-            async packageZip(name?: string): Promise<void> {
-                const zipName = name || (sharedWriter.getRootFolderName() + '.zip');
-                if (sharedDisk.isEnabled()) return;
-                const blob = await inMemoryZip(sharedZip);
-                saveBlob(blob, zipName);
-            },
             getWriter(): FileWriter { return sharedWriter; },
-            getZipCollector(): ZipCollector { return sharedZip; },
             getDownloadManager(): DownloadManager { return ensureDm(); },
         };
 
@@ -773,17 +780,14 @@ export default defineContentScript({
                             if (!panel) { console.error('进度面板不可用'); return; }
                             // totalModules 在此刻（用户勾选完模块点击开始）即固定，
                             // 面板据此渲染「X/Y 模块」，避免随备份推进递增（见 #7）
-                            panel.open?.({ mode: sharedDisk.isEnabled() ? 'directory' : 'zip', totalModules: exportTypes.length, selectedModules: exportTypes, isOtherSpace: req.isOwner === false });
+                            panel.open?.({ mode: sharedDisk.isEnabled() ? 'directory' : 'downloads', downloadsMode: !!downloadsBackend, totalModules: exportTypes.length, selectedModules: exportTypes, isOtherSpace: req.isOwner === false });
                             try { if (window['__QZ_BACKUP_PANEL__DM_ATTACH__']) (window['__QZ_BACKUP_PANEL__DM_ATTACH__'] as () => void)(); } catch { /* ignore */ }
 
-                            // 接面板动作：打包下载 ZIP / 重试失败下载（修复按钮无响应问题）
+                            // 接面板动作：重试失败下载（修复按钮无响应问题；打包下载已随 Zip 功能下线）
                             const panelWithAction = panel as unknown as { onAction?: (cb: (action: string) => void) => void };
                             panelWithAction.onAction?.((action) => {
                                 const dm = ensureDm();
-                                const api = window['__QZ_BACKUP_API__'] as Record<string, (...a: unknown[]) => Promise<unknown>> | undefined;
-                                if (action === 'download-zip') {
-                                    if (api?.packageZip) void api.packageZip();
-                                } else if (action === 'retry-downloads') {
+                                if (action === 'retry-downloads') {
                                     if (dm && typeof dm.retryFailed === 'function') void dm.retryFailed();
                                 }
                             });
@@ -797,9 +801,9 @@ export default defineContentScript({
                                 if (!pre.ok) { panel.error?.(pre.message); return; }
                                 panel.setStage?.(pre.message, '预检通过');
                                 // 产出方式由运行环境能力决定（用户无需手动选择）：
-                                // 支持 File System Access API → 直写本地目录；否则自动回退 ZIP 压缩包。
-                                // 因此只有环境支持时才在开始前弹目录选择，ZIP 模式不弹、文件收集进内存归档。
-                                const useDirectory = resolveExportMode(DiskFS.isSupported()) === 'Directory';
+                                // 支持 File System Access API → 直写本地目录；否则（Firefox）经 Downloads 直写下载目录。
+                                // 因此只有环境支持时才在开始前弹目录选择。
+                                const useDirectory = DiskFS.isSupported();
                                 if (useDirectory) {
                                     await panel.waitForDirectory?.(async () => {
                                         const api = window['__QZ_BACKUP_API__'] as Record<string, () => Promise<string>> | undefined;

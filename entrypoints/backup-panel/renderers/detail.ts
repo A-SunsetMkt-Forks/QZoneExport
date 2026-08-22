@@ -33,7 +33,7 @@ export async function updateDetailBadge(ctx: PanelContext): Promise<void> {
         applyDetailBadge(ctx, []);
         return;
     }
-    let pages: PageRecord[] = [];
+    let pages: PageRecord[];
     try {
         pages = await mgr.pagesSorted();
     } catch {
@@ -98,7 +98,7 @@ export async function renderDetailGrid(ctx: PanelContext): Promise<void> {
         return;
     }
 
-    let pages: PageRecord[] = [];
+    let pages: PageRecord[];
     try {
         pages = await mgr.pagesSorted();
     } catch {

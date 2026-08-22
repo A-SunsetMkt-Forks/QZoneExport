@@ -212,7 +212,7 @@ export function getImageFileName(photo: PhotoItem, cfg: PhotosConfig): string {
 
     if (renameType === 'Default') {
         // 相片名_链接指纹(URL哈希)：同一相片总得同名以支持去重
-        let downloadUrl = '';
+        let downloadUrl: string;
         try {
             downloadUrl = getDownloadUrl(photo, cfg.Images.exifType);
         } catch {
@@ -806,7 +806,7 @@ export class PhotosCollector implements ModuleCollector {
         if (!compensateOnly) {
             for (;;) {
                 await env.tick();
-                let pageItems: PhotoItem[] = [];
+                let pageItems: PhotoItem[];
                 let hadError = false;
                 let errMsg: string | undefined;
                 try {
@@ -972,7 +972,7 @@ export class PhotosCollector implements ModuleCollector {
             await env.tick();
             let pageItems: PhotoItem[] = [];
             let isLast = false;
-            let total = -1;
+            let total: number;
             let success = false;
             let lastErr: unknown;
             // 方案 A：运行内重试——失败批次对同一 picKey 重试 MAX_RETRY 次（带间隔），

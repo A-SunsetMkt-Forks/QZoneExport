@@ -52,12 +52,12 @@ function parseJsText(text: string): unknown {
     // 支持点访问（window.Messages=）、方括号访问（window["Messages"]= / window['Messages']=，
     // 部分 JS 压缩器会把点访问改写成方括号形式）以及多层混合（window.A.B["C"]=）。
     const m = trimmed.match(
-      /^\s*(?:(?:window|var|let|const)\s+)?[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\[\s*['"][^'"]+['"]\s*\])*\s*=\s*([\[{][\s\S]*)$/,
+      /^\s*(?:(?:window|var|let|const)\s+)?[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\[\s*['"][^'"]+['"]\s*\])*\s*=\s*([[{][\s\S]*)$/,
     );
     if (m) {
         // 截掉数据字面量（[ 或 { 起）之后的非 JSON 残留：旧版/压缩器可能在 ]; 后追加标记文本
         // （实测有文件以 `];backedup` 结尾），不清理会令 JSON.parse 失败。
-        const body = m[1]!.trim().replace(/[^\]\}]*$/, '');
+        const body = m[1]!.trim().replace(/[^\]}]*$/, '');
         try {
             return JSON.parse(body);
         } catch {
@@ -70,7 +70,7 @@ function parseJsText(text: string): unknown {
         trimmed.indexOf('{') >= 0 ? trimmed.indexOf('{') : Infinity,
     );
     if (isFinite(idx)) {
-        const body = trimmed.slice(idx).trim().replace(/[^\]\}]*$/, '');
+        const body = trimmed.slice(idx).trim().replace(/[^\]}]*$/, '');
         try {
             return JSON.parse(body);
         } catch {

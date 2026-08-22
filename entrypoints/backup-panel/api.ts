@@ -49,7 +49,6 @@ export function createPanel(): { host: HTMLElement; api: BackupPanelAPI } {
         notificationsEl: $('#notifications') as HTMLElement,
         bannerEl: $('.panel-banner'),
         footerEl: $('.panel-footer'),
-        downloadBtn: $('.btn-download') as HTMLButtonElement,
         closeBtn: $('.btn-close') as HTMLButtonElement,
         headerClose: $('.panel-close') as HTMLButtonElement,
 
@@ -318,10 +317,6 @@ export function createPanel(): { host: HTMLElement; api: BackupPanelAPI } {
         if (action === 'view-logs' || action === 'switch-log') {
             const logTab = shadow.querySelector('.tab[data-tab="log"]') as HTMLButtonElement | null;
             if (logTab && !logTab.classList.contains('active')) logTab.click();
-            return;
-        }
-        if (action === 'download-zip') {
-            if (ctx.actionCb) ctx.actionCb('download-zip');
             return;
         }
     });
@@ -661,6 +656,13 @@ export function createPanel(): { host: HTMLElement; api: BackupPanelAPI } {
             ctx.moduleMap.clear();
             ctx.selectedMediaIds.clear();
             if (ctx.notificationsEl) ctx.notificationsEl.innerHTML = '';
+            // Firefox 形态 B（downloads 直写）：无「选目录」环节，open 即备份真正开始 → 在此锚定总耗时；
+            // Chrome directory 模式仍由 waitForDirectory 选完目录后锚定（keep 原状，不回退该分支）。
+            if (options.mode !== 'directory') {
+                ctx.startedAt = Date.now();
+                ctx.finishedAt = undefined;
+                startElapsedTicker();
+            }
             renderModuleBars(ctx);
             renderStats(ctx);
             renderOverviewTop3(ctx);
@@ -807,9 +809,6 @@ export function createPanel(): { host: HTMLElement; api: BackupPanelAPI } {
                 mediaLinkMode: result.mediaLinkMode,
             };
             renderCompletionBanner(ctx);
-            if (result.mode !== 'directory') {
-                ctx.downloadBtn.style.display = 'inline-flex';
-            }
             renderStats(ctx);
             renderOverviewTop3(ctx);
             renderMediaGrid(ctx);
@@ -840,7 +839,6 @@ export function createPanel(): { host: HTMLElement; api: BackupPanelAPI } {
                 setPrimaryStatus('请先选择备份保存目录');
                 ctx.footerEl.style.display = 'flex';
                 ctx.footerEl.classList.add('active');
-                ctx.downloadBtn.style.display = 'none';
 
                 ctx.dirCtaEl.style.display = 'flex';
                 const ovTab = shadow.querySelector('.tab[data-tab="ov"]') as HTMLButtonElement | null;
@@ -915,7 +913,6 @@ export function createPanel(): { host: HTMLElement; api: BackupPanelAPI } {
     /* ===== Footer 按钮事件 ===== */
     ctx.headerClose.onclick = () => void requestClose();
     ctx.closeBtn.onclick = () => void requestClose();
-    ctx.downloadBtn.onclick = () => { if (ctx.actionCb) ctx.actionCb('download-zip'); };
 
     // 暴露给外部（旧版兼容）
     (window as any).__QZ_BACKUP_PANEL__DM_ATTACH__ = attachDM;

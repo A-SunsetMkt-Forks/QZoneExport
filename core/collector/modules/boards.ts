@@ -98,7 +98,7 @@ export class BoardsCollector implements ModuleCollector {
         await env.report('list', 0, -1, undefined, undefined, { done: 0, total: -1 });
         for (;;) {
             await env.tick();
-            let pageItems: BoardItem[] = [];
+            let pageItems: BoardItem[];
             try {
                 const call = boardList(env.ctx, env.config, pageIndex);
                 const text = await env.requester.get(call.url, call.params);

@@ -41,14 +41,6 @@ type Cfg = QzoneApiConfig;
 
 /* ============ 公共模块（原 API.Common） ============ */
 
-/** 获取用户统计信息（原 getUserStatistics） */
-export function userStatistics(ctx: Ctx): ApiCall {
-    return {
-        url: REST_URLS.USER_OVERVIEW_URL,
-        params: { uin: ctx.targetUin, param: 16, g_tk: ctx.gtk, qzonetoken: ctx.token },
-    };
-}
-
 /** 获取用户信息（原 getUserInfos） */
 export function userInfos(ctx: Ctx): ApiCall {
     return {
@@ -303,10 +295,12 @@ export function friendshipTime(ctx: Ctx, targetUin: number): ApiCall {
     };
 }
 
+/** 空间访问权限探测：经个人信息接口判断（cgi_userinfo_get_all，-4009=无权访问）。
+ *  原 main_page_cgi（USER_OVERVIEW_URL）概览不稳定，改用 base.qzone 的个人信息接口。 */
 export function zoneAccess(ctx: Ctx, targetUin: number): ApiCall {
     return {
-        url: REST_URLS.USER_OVERVIEW_URL,
-        params: { uin: targetUin, param: '3_' + targetUin + '_0|8_8_' + targetUin + '_1_1_0_0_1|15|16', g_tk: ctx.gtk, qzonetoken: ctx.token },
+        url: REST_URLS.USER_INFO_URL,
+        params: { uin: targetUin, vuin: ctx.ownerUin, fupdate: 1, rd: Math.random(), g_tk: ctx.gtk, qzonetoken: ctx.token },
     };
 }
 

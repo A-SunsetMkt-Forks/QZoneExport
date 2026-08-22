@@ -3,13 +3,16 @@
  * 备份数据里的时间字段格式不统一（秒级时间戳 / 已格式化字符串 / 毫秒），统一在此收口。
  */
 
-/** 合法时间范围（毫秒级时间戳）：1990-01-01 ~ 2100-12-31，用于过滤 1970、2106 等异常值 */
+/** 合法时间范围（毫秒级时间戳）：1990-01-01（跳过 1970 纪元占位与更早异常）～ 当前时刻 */
 const MIN_VALID_MS = new Date(1990, 0, 1, 0, 0, 0).getTime();
-const MAX_VALID_MS = new Date(2100, 11, 31, 23, 59, 59).getTime();
 
-/** 判断毫秒级时间戳是否在合理范围内（避免 2106 年 UINT32 溢出、1970 年默认值等异常） */
+/**
+ * 判断毫秒级时间戳是否在合理范围内。
+ * 下限跳过 1970 等纪元占位/异常值；上限取当前时刻——未来时间戳是非法数据
+ * （例如 QQ 的 UINT32 哨兵 4294967295 会换算成 2106 年，晚于现在应视为无效）。
+ */
 export function isValidTimestampMs(ms: number): boolean {
-    return ms >= MIN_VALID_MS && ms <= MAX_VALID_MS;
+    return ms >= MIN_VALID_MS && ms <= Date.now();
 }
 
 /** 把备份里各种形态的时间统一成 yyyy-MM-dd HH:mm:ss */

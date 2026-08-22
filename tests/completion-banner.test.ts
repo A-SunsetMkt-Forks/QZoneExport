@@ -98,21 +98,23 @@ describe('buildCompletionBanner 模式分支', () => {
         expect(settled.text).toContain('合并回备份目录');
     });
 
-    it('zip 模式引导打包下载，且内嵌的下载态同样实时', () => {
-        const info: CompletionInfo = { mode: 'zip' };
+    it('downloads 模式直写下载目录，无「打包下载」引导', () => {
+        const info: CompletionInfo = { mode: 'downloads' };
         const running = buildCompletionBanner(info, gpOf({ totalTasks: 100, succeeded: 40, failed: 0, running: 60 }));
-        expect(running.text).toContain('打包下载');
-        expect(running.text).toContain('媒体下载进行中 40/100');
+        expect(running.text).toContain('媒体文件下载进行中');
+        expect(running.text).not.toContain('打包下载'); // 形态 B 无打包按钮
 
         const done = buildCompletionBanner(info, gpOf({ totalTasks: 100, succeeded: 100, failed: 0 }));
-        expect(done.text).toContain('媒体已下载');
+        expect(done.text).toContain('全部媒体文件下载成功');
+        expect(done.text).toContain('文件已直接写入下载目录');
         expect(done.text).not.toContain('进行中');
+        expect(done.text).not.toContain('打包下载');
     });
 
-    it('zip + 外链模式不展示媒体下载描述', () => {
-        const v = buildCompletionBanner({ mode: 'zip', mediaLinkMode: true }, gpOf({ totalTasks: 0, succeeded: 0, failed: 0 }));
-        expect(v.text).toContain('打包下载');
-        expect(v.text).not.toContain('媒体下载');
+    it('downloads + 外链模式不追加落盘位置文案', () => {
+        const v = buildCompletionBanner({ mode: 'downloads', mediaLinkMode: true }, gpOf({ totalTasks: 0, succeeded: 0, failed: 0 }));
+        expect(v.text).toContain('媒体使用QQ空间外链');
+        expect(v.text).not.toContain('媒体下载进行中');
     });
 
     it('无进度快照（旧 DM 实例）时按已结束处理，不会永久卡在「进行中」', () => {

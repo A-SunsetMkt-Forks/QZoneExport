@@ -8,6 +8,7 @@
 import { loadData, loadItems, loadList, type DataKey } from './sources';
 import { formatTime, monthOf, timeValue, isValidTimestampMs } from './format';
 import { likeTotal, itemComments, viewCount, isExternalVideo, videoUrl, locationOf } from './content';
+import { resolvePhotoTime } from './media';
 
 /** 各模块条目数（键名与左侧导航 count 字段、旧 user.js 字段一致） */
 export interface ModuleCounts {
@@ -92,7 +93,7 @@ export const YEAR_MODULES: {
 /** 相片时间字段（统计时间跨度、月年活跃度、初识空间、深夜动态都需要；与 YEAR_MODULES 同口径） */
 export const PHOTO_TIME_FIELDS = {
     label: '相片',
-    timeOf: (photo: Record<string, any>) => photo.uploadtime || photo.uploadTime,
+    timeOf: (photo: Record<string, any>) => resolvePhotoTime(photo, 'upload'),
 };
 
 /** 单个模块的按年计数 */
@@ -181,7 +182,7 @@ export async function loadTimeRange(): Promise<TimeRange> {
         if (isFeedAlbum(album)) continue;
         const photos = album.photoList || [];
         for (const photo of photos) {
-            const ts = timeValue(photo.uploadtime || photo.uploadTime);
+            const ts = timeValue(resolvePhotoTime(photo, 'upload'));
             if (validTs(ts)) {
                 if (ts < minTs) minTs = ts;
                 if (ts > maxTs) maxTs = ts;
@@ -457,7 +458,7 @@ const PHOTO_LOCATION_FIELDS = {
         const lbs = photo.custom_lbs || photo.lbs;
         return lbs ? (lbs.idname || lbs.name || '') : '';
     },
-    timeOf: (photo: Record<string, any>) => photo.uploadtime || photo.uploadTime,
+    timeOf: (photo: Record<string, any>) => resolvePhotoTime(photo, 'upload'),
 };
 
 /** 最常访问地点的条目 */

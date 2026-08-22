@@ -10,6 +10,7 @@
 import { loadItems } from './sources';
 import { formatTime, timeValue } from './format';
 import { isFeedAlbum } from './counts';
+import { resolvePhotoTime } from './media';
 import type { DataKey } from './sources';
 
 /** 单条时间轴条目 */
@@ -106,7 +107,7 @@ export async function loadTimeline(
         {
             key: 'photos',
             label: '相片',
-            timeOf: (i) => i.uploadtime || i.uploadTime,
+            timeOf: (i) => resolvePhotoTime(i, 'upload'),
             titleOf: (i) => i.name || i.desc || '相片',
             route: 'albums',
             batch: true,

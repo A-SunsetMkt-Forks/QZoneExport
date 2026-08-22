@@ -247,7 +247,7 @@ export class SharesCollector implements ModuleCollector {
         await env.report('list', 0, -1, undefined, undefined, { done: 0, total: -1 });
         for (;;) {
             await env.tick();
-            let newItems: ShareItem[] = [];
+            let newItems: ShareItem[];
             try {
                 const call = shareList(env.ctx, env.config, page);
                 const html = await env.requester.get(call.url, call.params);

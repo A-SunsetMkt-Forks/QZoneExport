@@ -21,7 +21,6 @@ export interface PanelContext {
     notificationsEl: HTMLElement;
     bannerEl: HTMLElement;
     footerEl: HTMLElement;
-    downloadBtn: HTMLButtonElement;
     closeBtn: HTMLButtonElement;
     headerClose: HTMLButtonElement;
     /** 页签容器（.panels）：用于测量并固定统一高度，切换页签不再跳动 */

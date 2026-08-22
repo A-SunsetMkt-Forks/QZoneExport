@@ -542,7 +542,7 @@
                     <ul>
                         <li><b>包含：</b>说说文字、日志正文、留言、好友列表、分享记录等文本数据</li>
                         <li><b>格式：</b>HTML（浏览器直接看，默认）/ MarkDown（笔记工具）；JSON 始终自动导出，好友额外导出 Excel</li>
-                        <li><b>存储：</b>采集后直接写入备份目录（Chrome/Edge），或自动打包为 ZIP（Firefox 等不支持的浏览器）</li>
+                        <li><b>存储：</b>Chrome / Edge 直接写入你选择的目录；Firefox 自动写入浏览器下载目录的 QQ空间备份_<uin>/ 文件夹（不再打包 ZIP）</li>
                         <li><b>特点：</b>采集即得到，不依赖额外下载</li>
                     </ul>
                 </div>
@@ -584,9 +584,19 @@
             <div class="preset-default-items">
                 <div class="preset-default-item"><span class="preset-default-label">文案格式</span>HTML</div>
                 <div class="preset-default-item"><span class="preset-default-label">备份范围</span>全量备份</div>
-                <div class="preset-default-item"><span class="preset-default-label">媒体下载</span>助手直写目录</div>
+                <div class="preset-default-item"><span class="preset-default-label">媒体下载</span>助手直写目录（Firefox 为「浏览器下载器」）</div>
             </div>
             <p class="preset-default-note">首次使用建议采用默认组合，配置简单、上手快速。日常增量备份（只采集上次之后的新内容）可在「设置」页对应模块的「备份范围」中调整。</p>
+        </div>
+
+        <!-- 浏览器差异 -->
+        <div class="preset-default" id="guide-browsers">
+            <div class="preset-default-title"><span class="tag tag-scope">兼容</span> 浏览器差异</div>
+            <div class="preset-default-note" style="line-height:1.8;">
+                · <b>Chrome / Edge</b>：文案写入「你选择的目录」；支持「助手直写目录」（默认），媒体与文案同目录、一步到位。<br>
+                · <b>Firefox</b>：<b>不支持「助手直写目录」</b>，文案自动写入「下载目录 / QQ空间备份_&lt;uin&gt;/」文件夹，默认用「浏览器下载器」。<br>
+                · 无论哪个浏览器，改用外部下载器（浏览器下载器 / Aria2）时，媒体落在它自己的目录，需自行合并回备份目录。
+            </div>
         </div>
 
         <div class="footer">
@@ -594,8 +604,8 @@
             <div class="tip" id="guide-tip">
                 <b>提示：</b>文案格式选 HTML 时，备份完成后打开备份目录里的 <b>index</b> 文件即可离线浏览全部内容；
                 选 MarkDown 时需用对应的笔记工具打开。JSON 格式始终自动导出，更多选项可在助手「设置」页调整。<br>
-                媒体下载默认使用「助手直写目录」：媒体直接写入备份目录，与文案同目录、一步到位，无需额外合并。
-                若改用「浏览器下载器」，请提前关闭浏览器「下载前询问每个文件的保存位置」，否则每个文件都需手动确认。
+                若选用「浏览器下载器」下载媒体，请提前关闭浏览器「下载前询问每个文件的保存位置」，否则每个文件都需手动确认；
+                浏览器之间在保存位置 / 下载方式上的差异与合并说明，见上方「浏览器差异」。
             </div>
             <div class="actions" id="guide-actions">
                 <button class="btn btn-secondary" id="btnOptions" type="button">⚙️ 打开配置页面</button>

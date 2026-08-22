@@ -3,8 +3,10 @@
  */
 
 export interface PanelOpenOptions {
-    mode: 'zip' | 'directory';
+    mode: 'downloads' | 'directory';
     directoryName?: string;
+    /** Firefox 形态 B：全直写下载目录（无打包 ZIP），完成时不显示「打包下载」按钮 */
+    downloadsMode?: boolean;
     /** 用户在选择模块弹窗中勾选的模块总数，固定不变（用于「X/Y 模块」统计，见 #7） */
     totalModules?: number;
     /** 用户勾选的模块标识列表（用于概览展示全部模块进度，含「未开始」状态） */
@@ -34,7 +36,7 @@ export type PanelEvent =
     | { type: 'paused' }
     | { type: 'resumed' };
 
-export type PanelAction = 'download-zip' | 'retry-downloads' | 'close';
+export type PanelAction = 'retry-downloads' | 'close';
 
 export interface BackupPanelAPI {
     open(options: PanelOpenOptions): void;
@@ -46,7 +48,7 @@ export interface BackupPanelAPI {
      * 由 complete() 调用后才放行到 100%。
      */
     beginFinalize(text: string): void;
-    complete(result: { mode: 'zip' | 'directory'; needMerge?: boolean; mediaLinkMode?: boolean }): void;
+    complete(result: { mode: 'downloads' | 'directory'; needMerge?: boolean; mediaLinkMode?: boolean; downloadsMode?: boolean }): void;
     error(message: string): void;
     close(): void;
     onAction(cb: (action: PanelAction) => void): void;

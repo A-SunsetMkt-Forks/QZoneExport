@@ -1,8 +1,10 @@
 import { friendList, sortFriendList, friendshipTime, specialCareList, zoneAccess } from '../../qzone-api/clients';
 import { sortBy, toJson } from '../../shared/utils';
 import type { CollectContext, ModuleCollector } from '../pipeline';
-import { randomSleep, type AvatarTaskRegistry, writeModuleOutputs } from './helpers';
+import { type AvatarTaskRegistry, writeModuleOutputs } from './helpers';
 import type { CollectorEnv } from './types';
+import { LIMITS } from '../../shared/constants';
+import { runPool } from '../../downloader/pool';
 import * as XLSX from 'xlsx';
 
 /**
@@ -265,6 +267,10 @@ export class FriendsCollector implements ModuleCollector {
 
     /**
      * 获取好友添加时间/亲密度/共同信息（移植自 friends.js getFriendsTime L137-205）
+     *
+     * 由逐条串行 + 每项 randomSleep 改为并发池（复用「明细采集」的并发上限
+     * Common.itemDetailConcurrency）：好友数几百时，串行总耗时 ≈ N×休眠，并发后由该上限截断。
+     * 限流由 requester 内置重试+指数退避兜底（429 只放缓不失败）；担心接口敏感可调低该配置。
      */
     private async collectFriendsTime(data: any, friends: FriendItem[], oldItems: FriendItem[]): Promise<void> {
         const env = this.env;
@@ -272,19 +278,26 @@ export class FriendsCollector implements ModuleCollector {
         if (!cfg.Interactive) {
             return;
         }
-        for (let i = 0; i < friends.length; i++) {
-            const friend = friends[i]!;
-            // 好友号为自己号或非新好友，跳过
+        // 本人只打标不请求；真正需要请求的是「非本人 且 新增」的好友，先筛出来再并发
+        const targets: FriendItem[] = [];
+        for (const friend of friends) {
             friend.isMe = friend.uin === env.ctx.ownerUin;
-            if (friend.isMe || !this.isNewFriend(oldItems, friend)) {
-                if (friend.isMe) {
-                    friend.addFriendTime = 0;
-                    friend.intimacyScore = 0;
-                    friend.common = {};
-                }
+            if (friend.isMe) {
+                friend.addFriendTime = 0;
+                friend.intimacyScore = 0;
+                friend.common = {};
                 continue;
             }
-            await env.tick();
+            if (this.isNewFriend(oldItems, friend)) targets.push(friend);
+        }
+        if (!targets.length) {
+            return;
+        }
+        const concurrency = (env.config.Common as any)?.itemDetailConcurrency ?? LIMITS.ITEM_DETAIL_CONCURRENCY;
+        env.logger.info(`[好友并发] 互动信息 | 待处理=${targets.length} | 上限=${concurrency}`);
+        let done = 0;
+        await runPool(targets, async (friend) => {
+            await env.tick(); // 每个请求前响应暂停/取消
             try {
                 const call = friendshipTime(env.ctx, friend.uin);
                 const text = await env.requester.get(call.url, call.params);
@@ -304,39 +317,56 @@ export class FriendsCollector implements ModuleCollector {
             } catch (error) {
                 env.logger.error(`获取好友添加时间异常 | uin=${friend.uin}`, error instanceof Error ? error.message : String(error));
             }
-            await env.report('friendship', i + 1, friends.length, undefined, undefined, { done: i + 1, total: friends.length });
-            // 等待一下再请求
-            await randomSleep(env, cfg.randomSeconds);
+            done += 1;
+            // 全模块主体总进度 = 2 × 新好友数（互动占前一半，权限占后一半），done 单调递增，避免阶段切换时进度倒退
+            await env.report('friendship', done, targets.length * 2, undefined, undefined, { done, total: targets.length * 2 });
+        }, { concurrency });
+    }
+
+    /**
+     * 探测单个好友的空间访问权限（cgi_userinfo_get_all，-4009=无权访问）。
+     * 接口异常/其它错误码不足以定论时返回 undefined（视为未知，不把接口异常误判成可访问或无权）。
+     */
+    private async probeFriendAccess(env: CollectorEnv, targetUin: number): Promise<boolean | undefined> {
+        try {
+            const call = zoneAccess(env.ctx, targetUin);
+            const text = await env.requester.get(call.url, call.params);
+            const res = toJson<any>(text, /^_Callback\(/);
+            if (res && typeof res.code === 'number') {
+                if (res.code === -4009) return false; // 无访问权限
+                if (res.code === 0) return true;      // 有访问权限
+                env.logger.warn(`空间权限探测异常 | uin=${targetUin} | code=${res.code}`, res.msg || '');
+            }
+        } catch (error) {
+            env.logger.warn(`空间权限探测失败 | uin=${targetUin}`, error instanceof Error ? error.message : String(error));
         }
+        return undefined;
     }
 
     /**
      * 获取好友空间访问权限（移植自 friends.js getZoneAccessList L416-455）
+     * 接口为 cgi_userinfo_get_all：并发会触发 501 限流，必须像旧版那样逐一串行探测；
+     * 因此不复用「明细采集」的并发池，改为按顺序逐个请求。
      */
     private async collectZoneAccess(friends: FriendItem[], oldItems: FriendItem[]): Promise<void> {
         const env = this.env;
         if (!env.config.Friends.ZoneAccess) {
             return;
         }
-        for (let i = 0; i < friends.length; i++) {
-            const friend = friends[i]!;
-            if (friend.isMe || !this.isNewFriend(oldItems, friend)) {
-                continue;
-            }
+        // 只探测「非本人 且 新增」的好友
+        const targets = friends.filter((f) => !f.isMe && this.isNewFriend(oldItems, f));
+        if (!targets.length) {
+            return;
+        }
+        env.logger.info(`[好友串行] 空间权限 | 待处理=${targets.length}`);
+        let done = 0;
+        for (const friend of targets) {
             await env.tick();
-            try {
-                const call = zoneAccess(env.ctx, friend.uin);
-                const text = await env.requester.get(call.url, call.params);
-                const res = toJson<any>(text, /^_Callback\(/);
-                if (res.code && res.code != 0 && res.code != -4009) {
-                    env.logger.warn(`获取好友空间访问权限异常 | uin=${friend.uin} | code=${res.code}`, res.msg || '');
-                }
-                // 状态码为-4009表示无权限
-                friend.access = res.code !== -4009;
-            } catch (error) {
-                env.logger.error(`获取好友空间权限异常 | uin=${friend.uin}`, error instanceof Error ? error.message : String(error));
-            }
-            await env.report('zone-access', i + 1, friends.length, undefined, undefined, { done: i + 1, total: friends.length });
+            friend.access = await this.probeFriendAccess(env, friend.uin);
+            done += 1;
+            // 续在互动之后（前半段打满 targets），全模块主体总进度单调递增，避免进度倒退
+            const cum = targets.length + done;
+            await env.report('friendship', cum, targets.length * 2, undefined, '获取空间权限', { done: cum, total: targets.length * 2 });
         }
     }
 

@@ -27,7 +27,6 @@ import { blueThemeOverrides } from '../../core/shared/naive-theme';
 import {
     AVATAR_HOST_OPTIONS,
     COMMON_DEFAULTS,
-    DOWNLOAD_TYPE_OPTIONS,
     MEDIA_MODE_OPTIONS,
     MESSAGES_FILTER_WORDS,
     MODULE_DEFAULTS,
@@ -37,6 +36,7 @@ import {
     testAria2,
 } from '../../core/shared/config';
 import IncrementSetting from './IncrementSetting.vue';
+import { downloadTypeOptionsFor, defaultDownloadTypeFor } from '../../core/shared/backup-options';
 import IntervalSetting from './IntervalSetting.vue';
 import LikeSetting from './LikeSetting.vue';
 import CommentsSetting from './CommentsSetting.vue';
@@ -178,7 +178,8 @@ const MENU_OPTIONS = [
     { label: '收藏', key: 'Favorites' },
     { label: '分享', key: 'Shares' },
     { label: '访客', key: 'Visitors' },
-    { label: '工具', key: 'Tools' },
+    // 用户要求：Firefox 下隐藏工具菜单
+    ...(import.meta.env.FIREFOX ? [] : [{ label: '工具', key: 'Tools' }]),
     { label: '关于', key: 'About' },
 ];
 
@@ -274,10 +275,22 @@ function resetKeywordDraft(): void {
     keywordDraft.value = [...MESSAGES_FILTER_WORDS];
 }
 
-/** “助手直写目录”需要目录句柄，仅当文案也写入本地目录时可选 */
-const downloadTypeOptions = computed(() => DOWNLOAD_TYPE_OPTIONS.map((opt) => (
+/** “助手直写目录”需要目录句柄，仅当文案也写入本地目录时可选；
+ * Firefox 形态 B 直写目录不可用，选项集直接过滤掉 Disk */
+const downloadTypeOptions = computed(() => downloadTypeOptionsFor(import.meta.env.FIREFOX).map((opt) => (
     opt.value === 'Disk' ? { ...opt, disabled: !isDirectory.value } : opt
 )));
+
+// Firefox 形态 B：直写目录(Disk)不可用。用 watch 归一化而非一次性判断——
+// 初始 COMMON_DEFAULTS、onMounted 异步 loadConfig 深合并（重装后 storage 空会兜底回 Disk）、
+// 重置设置等任何来源写入 Disk 都会被改回 Browser，避免下拉显示空/选中无效项。
+if (import.meta.env.FIREFOX) {
+    watch(
+        () => config.Common.downloadType,
+        (v) => { if (v === 'Disk') config.Common.downloadType = 'Browser'; },
+        { immediate: true },
+    );
+}
 
 // 下载器联动：各配置块的显示条件
 const showFileSuffix = computed(() => isDownloadMedia.value);
@@ -505,6 +518,8 @@ async function onReset(): Promise<void> {
     }
     // 重建默认配置（与 loadConfig 的深合并逻辑一致）
     const fresh: Record<string, any> = { Common: { ...COMMON_DEFAULTS } };
+    // Firefox 形态 B：直写目录(Disk)不可用，重置后的下载方式默认浏览器下载器（Chrome 下该函数返回 'Disk' 与默认一致）
+    fresh.Common.downloadType = defaultDownloadTypeFor(import.meta.env.FIREFOX);
     fresh.Common.Aria2 = { ...COMMON_DEFAULTS.Aria2 };
     for (const name of Object.keys(MODULE_DEFAULTS)) {
         fresh[name] = JSON.parse(JSON.stringify(MODULE_DEFAULTS[name]));
@@ -684,7 +699,7 @@ watch(activeTab, (tab) => {
                                     :show-icon="true"
                                     class="block-alert"
                                 >
-                                    媒体由助手逐个请求并写入，需要配合追加引用来源使用；媒体极多时建议用 Aria2协议下载器，但备份完自行把媒体文件合并回备份目录。
+                                    助手直写目录：媒体由助手逐个请求并写入备份目录（与文案同目录、一步到位），无需手动合并；按需在「追加引用来源」中配置域名以绕过防盗链。媒体数量极大、需要更高下载并行时，可改用 Aria2协议下载器（改用后媒体落在 Aria2 目录，需自行合并回备份目录）。
                                 </n-alert>
                                 <n-alert
                                     v-if="isDirectory && isExternalDownloader"

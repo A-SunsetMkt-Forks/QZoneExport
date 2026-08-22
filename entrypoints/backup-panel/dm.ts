@@ -24,6 +24,9 @@ export interface DmApi {
      */
     moduleProgressMap?(): Record<string, { overallPercent: number; totalTasks: number }> | null;
 
+    /** Firefox 形态 B：文案/查看器落盘进度（写文件 N/M），null 表示无进行中的文案写入 */
+    getMetaWriteProgress?(): { done: number; total: number } | null;
+
     pauseAll?(): Promise<void>;
     resumeAll?(): Promise<void>;
     retryFailed?(): Promise<void>;

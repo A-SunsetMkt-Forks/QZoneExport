@@ -264,7 +264,6 @@ export function buildPanelHtml(): string {
                 <div class="panel-footer">
                     <div class="footer-left"></div>
                     <div class="footer-right">
-                        <button class="btn btn-primary btn-download" style="display:none">打包下载</button>
                         <button class="btn btn-default btn-close">关闭</button>
                     </div>
                 </div>

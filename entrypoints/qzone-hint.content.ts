@@ -1,8 +1,9 @@
+import '../core/shared/polyfill';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import {
     MODULES,
     DEFAULT_MEDIA_MODE,
-    DEFAULT_DOWNLOAD_TYPE,
+    defaultDownloadTypeFor,
     DEFAULT_EXPORT_TYPE,
     mediaSummaryText,
     readLaunchFlow,
@@ -93,9 +94,10 @@ interface AlbumItem {
 }
 
 /** 兜底默认摘要（配置拉取失败时显示），全部由 COMMON_DEFAULTS 派生，不再手写文案 */
+const isFirefox = import.meta.env.FIREFOX;
 const DEFAULT_SUMMARY: BackupLaunchContext['summary'] = {
-    mediaText: mediaSummaryText(DEFAULT_MEDIA_MODE, DEFAULT_DOWNLOAD_TYPE),
-    downloadType: DEFAULT_DOWNLOAD_TYPE,
+    mediaText: mediaSummaryText(DEFAULT_MEDIA_MODE, defaultDownloadTypeFor(isFirefox)),
+    downloadType: defaultDownloadTypeFor(isFirefox),
     mediaMode: DEFAULT_MEDIA_MODE,
     exportText: DEFAULT_EXPORT_TYPE,
 };
@@ -115,7 +117,9 @@ async function readExportSummary(): Promise<BackupLaunchContext['summary']> {
     try {
         const sync = await chrome.storage.sync.get(['Common']);
         const Common = (sync.Common as any) ?? {};
-        const downloadType = Common.downloadType ?? DEFAULT_DOWNLOAD_TYPE;
+        const rawDt = Common.downloadType ?? defaultDownloadTypeFor(isFirefox);
+        // Firefox 形态 B：直写目录(Disk)不可用，历史/Chrome 配置归一化为 Browser
+        const downloadType = isFirefox && rawDt === 'Disk' ? 'Browser' : rawDt;
         const mediaMode = Common.mediaMode ?? DEFAULT_MEDIA_MODE;
         return {
             mediaText: mediaSummaryText(mediaMode, downloadType),
@@ -634,6 +638,8 @@ function buildBackupLaunchCard(host: HTMLElement): HTMLElement {
     const albumDropdown = document.createElement('div');
     albumDropdown.className = 'album-dropdown';
     albumDropdown.style.display = 'none';
+    /** 下拉内的相册列表容器（搜索框常驻，输入时仅此容器重建，保住焦点） */
+    let albumListEl: HTMLDivElement;
     // 阻止下拉内部点击（勾选/搜索/全选）冒泡到 document 的关闭监听器，
     // 否则勾选时 change→redraw 会先销毁 checkbox，click 冒泡到此见 target 已脱离文档树、
     // albumSelect.contains(detached) 返回 false 而误关下拉；与 popup 的 @click.stop 一致
@@ -686,7 +692,7 @@ function buildBackupLaunchCard(host: HTMLElement): HTMLElement {
         albumTrigger.prepend(tags);
     }
 
-    /** 重绘相册下拉框（支持搜索） */
+    /** 重绘相册下拉框。搜索框只建一次；输入时仅重建下方列表（保留搜索框焦点，否则每次按键丢焦点） */
     function redrawAlbumDropdown(filter = ''): void {
         albumDropdown.innerHTML = '';
         if (!ctx.albumList.length) {
@@ -700,9 +706,18 @@ function buildBackupLaunchCard(host: HTMLElement): HTMLElement {
         search.className = 'album-search';
         search.placeholder = '搜索相册名称…';
         search.value = filter;
-        search.addEventListener('input', () => redrawAlbumDropdown(search.value.trim()));
         albumDropdown.appendChild(search);
 
+        albumListEl = document.createElement('div');
+        albumDropdown.appendChild(albumListEl);
+        renderAlbumList('');
+
+        search.addEventListener('input', () => renderAlbumList(search.value.trim()));
+    }
+
+    /** 只重建相册列表（全选行 + 分组行），不动搜索框，避免输入时丢失焦点 */
+    function renderAlbumList(filter: string): void {
+        albumListEl.innerHTML = '';
         // 全选/取消全选：位于搜索框下方、相册列表上方
         // 始终作用于全部相册（不受搜索筛选影响），让用户可以一键取消全选再单独勾选
         const allRow = document.createElement('label');
@@ -720,12 +735,15 @@ function buildBackupLaunchCard(host: HTMLElement): HTMLElement {
                 ctx.selectedAlbumIds = [];
             }
             renderAlbumTrigger();
-            redrawAlbumDropdown('');
+            // 全选/取消全选作用于全部相册，清空搜索关键字避免列表与关键字不匹配
+            const s = albumDropdown.querySelector<HTMLInputElement>('.album-search');
+            if (s) s.value = '';
+            renderAlbumList('');
         });
         const allSpan = document.createElement('span');
         allSpan.textContent = `全选（${allCount} 个相册）`;
         allRow.append(allCb, allSpan);
-        albumDropdown.appendChild(allRow);
+        albumListEl.appendChild(allRow);
 
         const groups = new Map<string, AlbumItem[]>();
         for (const a of ctx.albumList) {
@@ -739,14 +757,14 @@ function buildBackupLaunchCard(host: HTMLElement): HTMLElement {
             const no = document.createElement('div');
             no.style.cssText = 'padding: 8px 12px; color:#9ca3af; font-size:12px;';
             no.textContent = '没有匹配的相册';
-            albumDropdown.appendChild(no);
+            albumListEl.appendChild(no);
             return;
         }
         for (const [groupName, list] of groups.entries()) {
             const g = document.createElement('div');
             g.className = 'album-group';
             g.textContent = `${groupName}（${list.length}）`;
-            albumDropdown.appendChild(g);
+            albumListEl.appendChild(g);
             const idSet = new Set(ctx.selectedAlbumIds);
             list.forEach((a) => {
                 const row = document.createElement('label');
@@ -767,7 +785,7 @@ function buildBackupLaunchCard(host: HTMLElement): HTMLElement {
                 const text = document.createElement('span');
                 text.textContent = `${a.name}（${a.total}）`;
                 row.append(cb, text);
-                albumDropdown.appendChild(row);
+                albumListEl.appendChild(row);
             });
         }
     }

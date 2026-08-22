@@ -31,7 +31,7 @@ export const LIMITS = {
     /** url.cn 短链解包最大并发数 */
     UNWRAP_URL_CONCURRENCY: 6,
     /** 条目级明细（评论/点赞/访客）采集最大并发数，避免单页条目裸 Promise.all 打爆接口与浏览器 */
-    ITEM_DETAIL_CONCURRENCY: 20,
+    ITEM_DETAIL_CONCURRENCY: 15,
     /** 文件后缀 MIME 探测最大并发数（对图片 CDN 发 GET 读 content-type，限流阈值远高于 QQ 空间 API） */
     SUFFIX_PROBE_CONCURRENCY: 10,
     /** url.cn 短链解析结果缓存上限（超出按插入顺序淘汰最旧，避免长期运行内存无限增长） */

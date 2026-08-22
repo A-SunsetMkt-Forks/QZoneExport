@@ -13,6 +13,7 @@
  */
 import { commentReplies, commentUser, itemComments, likeUsers, messagePublishTime, visitorUsers } from './content';
 import { loadItems } from './sources';
+import { resolvePhotoTime } from './media';
 
 export interface OwnerTargetInteraction {
     /** Owner 与 Target 是否不一致（即「查看他人空间的备份」） */
@@ -162,10 +163,6 @@ export function computeOwnerTargetInteraction(
     const ownerUin = toStr(ownerUinRaw);
     const targetUin = toStr(targetUinRaw);
 
-    let myBoards = 0;
-    let myComments = 0;
-    let taReplies = 0;
-    let myLikes = 0;
     let fromMe = 0;
     let fromTa = 0;
 
@@ -347,7 +344,7 @@ export function computeOwnerTargetInteraction(
     // ============ 相册 / 相片（相片挂在 album.photoList 下） ============
     const photos = albums.flatMap((a) => a.photoList || []);
     countMyLikes(albums, 'album', (a) => asNum(a.uploadtime ?? a.uploadTime ?? a.pubtime), (a) => 'album:' + (a.id ?? a.uploadtime));
-    countMyLikes(photos, 'photo', (p) => asNum(p.uploadtime ?? p.uploadTime), (p) => 'photo:' + (p.lloc ?? p.id ?? p.uploadtime));
+    countMyLikes(photos, 'photo', (p) => asNum(resolvePhotoTime(p, 'upload')), (p) => 'photo:' + (p.lloc ?? p.id ?? p.uploadtime));
 
     // ============ 分享 ============
     countMyLikes(shares, 'share', (s) => asNum(s.shareTime ?? s.custom_create_time), (s) => 'share:' + (s.shareId ?? s.id));
@@ -384,10 +381,10 @@ export function computeOwnerTargetInteraction(
     // 四项动作维度改为从已去重的 events 同源聚合，确保「统计卡片数字 == 互动明细筛选条数」。
     // 原逻辑在循环里按「动作次数」累加（同一线程多轮评论/同一留言板既发帖又回复会重复计），
     // 与 events 按「线程/条目」去重的口径不一致，导致点击卡片后明细条数与卡片数字不符（issue 1–4）。
-    myBoards = entries.filter((e) => e.category === 'board' && e.dir === 'me').length;
-    myComments = entries.filter((e) => e.category === 'comment' && e.dir === 'me').length;
-    taReplies = entries.filter((e) => e.category === 'reply' && e.dir === 'ta').length;
-    myLikes = entries.filter((e) => e.category === 'like' && e.dir === 'me').length;
+    const myBoards = entries.filter((e) => e.category === 'board' && e.dir === 'me').length;
+    const myComments = entries.filter((e) => e.category === 'comment' && e.dir === 'me').length;
+    const taReplies = entries.filter((e) => e.category === 'reply' && e.dir === 'ta').length;
+    const myLikes = entries.filter((e) => e.category === 'like' && e.dir === 'me').length;
 
     const conversations = convItemKeys.size;
     const totalInteractions = myBoards + myComments + taReplies + myLikes;

@@ -236,8 +236,11 @@ function parseItemTime(item: AnyItem): Date {
             }
         }
         if (isNaN(d.getTime())) continue;
-        // 1970 是 Unix 纪元占位，QQ 空间 2005 年后才有内容，真实时间不可能在此；跳过该字段取下一个
-        if (d.getUTCFullYear() === 1970) continue;
+        // 1970 是 Unix 纪元占位（QQ 空间 2005 年后才有内容，真实时间不可能在此）；
+        // 时间晚于当前时刻则是非法/损坏数据（如 QQ 的 UINT32 哨兵换算成的未来年份）。
+        // 两种情况都跳过该字段取下一个。
+        const y = d.getUTCFullYear();
+        if (y === 1970 || d.getTime() > Date.now()) continue;
         return d;
     }
     return new Date(NaN);
@@ -258,7 +261,7 @@ function formatExportTime(d: Date): string {
 /** 去除 QQ 空间签名的 BBcode 标签（[url=][ft=][I] 等），仅保留纯文本 */
 function stripBBCode(s: string): string {
     return s
-        .replace(/\[[\/]?[a-zA-Z][^\]]*\]/g, '')
+        .replace(/\[[/]?[a-zA-Z][^\]]*\]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 }

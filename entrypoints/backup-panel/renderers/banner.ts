@@ -20,7 +20,7 @@ import { fmtDuration } from '../utils';
 
 /** 备份完成时的上下文（来自 `complete(result)`，全程不变） */
 export interface CompletionInfo {
-    mode: 'zip' | 'directory';
+    mode: 'downloads' | 'directory';
     needMerge?: boolean;
     mediaLinkMode?: boolean;
 }
@@ -56,7 +56,7 @@ export function buildCompletionBanner(info: CompletionInfo, gp: DmProgress | nul
     const hasDownloads = !info.mediaLinkMode; // 外链模式不下载本地文件
 
     let cls: 'ok' | 'warn' = 'ok';
-    let text = '';
+    let text: string;
     let statusText = '备份完成。';
 
     if (info.mediaLinkMode) {
@@ -84,14 +84,13 @@ export function buildCompletionBanner(info: CompletionInfo, gp: DmProgress | nul
         if (info.needMerge && dlSettled) {
             text += ' ⚠️ 媒体由外部下载器下载在其它目录，需把媒体文件合并回备份目录，否则查看备份时图片/视频无法显示。';
         }
-    } else {
-        // zip 模式：横幅换成「打包下载」引导，但内嵌的下载态描述同样需要实时
-        const mediaPart = !dlSettled
-            ? (allPaused ? '媒体下载已暂停 ' : '媒体下载进行中 ') + doneDl + '/' + total
-            : (failedDl > 0 ? '有 ' + failedDl + ' 个下载失败' : '媒体已下载');
-        text = hasDownloads
-            ? `文案采集完成（${mediaPart}）。请点击下方「打包下载」按钮下载备份压缩包。`
-            : '文案采集完成，请点击下方「打包下载」按钮下载备份压缩包。';
+    } else if (!info.mediaLinkMode) {
+        // 形态 B（Firefox）：文案/查看器经 Downloads 直写下载目录（无磁盘选择、无 ZIP 打包、
+        // 也没有「打包下载」按钮），媒体与文案同落 下载目录/QQ空间备份_<uin>/ 根下，无需合并。
+        // 基础 text 已实时反映进度/暂停/失败，这里只在真正结束后补一句落盘位置。
+        if (dlSettled) {
+            text += ' 文件已直接写入下载目录，打开备份目录里的 index 即可查看。';
+        }
     }
 
     return { cls, text, statusText };

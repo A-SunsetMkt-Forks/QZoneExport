@@ -4,6 +4,7 @@ import { NCollapse, NCollapseItem, NSpin, NTag } from 'naive-ui';
 import { loadItems, type DataKey } from '../data/sources';
 import { formatTime, timeValue } from '../data/format';
 import { thatYearToday } from '../data/thatYearToday';
+import { resolvePhotoTime } from '../data/media';
 import { navigate } from '../router';
 import MessageItem from './items/MessageItem.vue';
 import ArticleItem from './items/ArticleItem.vue';
@@ -65,10 +66,8 @@ const total = computed(() => groups.value.reduce((sum, group) => sum + group.ite
  */
 const defaultExpanded = ref<string[]>([]);
 
-/** 相片时间：只用上传时间（与看板统计口径一致，不看原始拍摄时间） */
-function photoTimeOf(photo: Record<string, any>): any {
-    return photo.uploadtime || photo.uploadTime;
-}
+/** 相片时间：上传优先、拍摄兜底（与时间轴口径一致），共用统一解析 */
+const photoTimeOf = (photo: Record<string, any>): number | string | undefined => resolvePhotoTime(photo, 'upload');
 
 /**
  * 相片多为批量上传，同一相册内间隔不超过该值的相片合并成一条

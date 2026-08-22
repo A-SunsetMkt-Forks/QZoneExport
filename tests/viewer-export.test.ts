@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DiskFS } from '../core/fs/disk-fs';
-import { FileWriter, ZipCollector } from '../core/fs/writer';
+import { FileWriter } from '../core/fs/writer';
 import type { ModuleBackupRow } from '../core/store/backup-db';
 import {
     REQUIRED_VIEWER_FILES,
@@ -13,16 +13,44 @@ import {
 const ROOT = 'QQ空间备份_10001';
 const globalAny = globalThis as any;
 
-/** 未选目录 → 走 ZIP 内存收集，便于断言产物路径 */
-function makeWriter(): { writer: FileWriter; zip: ZipCollector } {
-    const zip = new ZipCollector();
-    const writer = new FileWriter(new DiskFS(), zip, ROOT);
-    return { writer, zip };
+/** 内存 DiskFS（模拟「已选目录」），替代已下线的 ZipCollector 内存收集后端 */
+class MemDiskFS extends DiskFS {
+    readonly map = new Map<string, string | Uint8Array>();
+    override isEnabled(): boolean { return true; }
+    override async getDir(_dirPath: string): Promise<FileSystemDirectoryHandle> {
+        return null as unknown as FileSystemDirectoryHandle;
+    }
+    override async write(filepath: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<FileSystemFileHandle> {
+        this.map.set(
+            filepath,
+            typeof data === 'string'
+                ? data
+                : data instanceof Uint8Array
+                    ? data
+                    : new Uint8Array(data instanceof Blob ? await data.arrayBuffer() : data),
+        );
+        return null as unknown as FileSystemFileHandle;
+    }
+    override async exists(filepath: string): Promise<boolean> {
+        return this.map.has(filepath);
+    }
 }
 
-/** 收集器内的路径集合（去掉根目录前缀，便于断言） */
-function paths(zip: ZipCollector): string[] {
-    return zip.getEntries().map((e) => e.path.replace(ROOT + '/', ''));
+/** 已选目录 → 直写内存盘，便于断言产物路径 */
+function makeWriter(): { writer: FileWriter; disk: MemDiskFS } {
+    const disk = new MemDiskFS();
+    const writer = new FileWriter(disk, ROOT);
+    return { writer, disk };
+}
+
+/** 写入的路径集合（去掉根目录前缀，便于断言） */
+function paths(disk: MemDiskFS): string[] {
+    return Array.from(disk.map.keys()).map((p) => p.replace(ROOT + '/', ''));
+}
+
+/** 写入的 [路径, 数据] 条目 */
+function entries(disk: MemDiskFS): Array<[string, string | Uint8Array]> {
+    return Array.from(disk.map.entries());
 }
 
 /**
@@ -62,7 +90,7 @@ afterEach(() => {
 describe('备份查看器生成', () => {
     it('查看器首页写入备份根目录，脚本/样式写入 Common/js、Common/css', async () => {
         stubExtension((p) => 'content-of:' + p);
-        const { writer, zip } = makeWriter();
+        const { writer, disk } = makeWriter();
 
         const result = await exportViewerWithVerify(writer, { uin: 10001 });
 
@@ -71,7 +99,7 @@ describe('备份查看器生成', () => {
         expect(result.attempts).toBe(1);
         expect(result.usedFallbackIndex).toBe(false);
 
-        const written = paths(zip);
+        const written = paths(disk);
         // 首页必须与数据目录同级，否则其相对路径数据请求全部 404；
         // 脚本/样式归入 Common/js、Common/css，与数据同属 Common 命名空间
         expect(written).toContain('index.html');
@@ -85,18 +113,18 @@ describe('备份查看器生成', () => {
         expect(written).toContain('Common/images/favicon.ico');
         expect(written).toContain('Common/images/no_cover.gif');
         expect(written).toContain('Common/images/media_missing.png');
-        // ZIP 条目应带备份根目录前缀
-        expect(zip.getEntries().every((e) => e.path.startsWith(ROOT + '/'))).toBe(true);
+        // 条目应带备份根目录前缀
+        expect(entries(disk).every(([p]) => p.startsWith(ROOT + '/'))).toBe(true);
     });
 
     it('随查看器一并导出微信表情到 Common/images/，脱离 jsdelivr 外部 CDN', async () => {
         stubExtension((p) => 'content-of:' + p);
-        const { writer, zip } = makeWriter();
+        const { writer, disk } = makeWriter();
 
         const result = await exportViewerWithVerify(writer, { uin: 10001 });
 
         expect(result.ok).toBe(true);
-        const written = paths(zip);
+        const written = paths(disk);
         // 微信表情随备份导出到本地 Common/images/，查看器离线即可显示，不再依赖 jsdelivr 在线引用
         expect(written).toContain('Common/images/2_02.png');
         expect(written).toContain('Common/images/Yellowdog.png');
@@ -115,7 +143,7 @@ describe('备份查看器生成', () => {
             }
             return 'content-of:' + p;
         });
-        const { writer, zip } = makeWriter();
+        const { writer, disk } = makeWriter();
         const errors: unknown[][] = [];
 
         const result = await exportViewerWithVerify(writer, { uin: 10001 }, {
@@ -124,14 +152,14 @@ describe('备份查看器生成', () => {
 
         expect(result.attempts).toBe(2);
         expect(result.ok).toBe(true);
-        expect(paths(zip)).toContain('Common/js/index.js');
+        expect(paths(disk)).toContain('Common/js/index.js');
         // 重试前必须留下错误日志
         expect(errors.length).toBeGreaterThan(0);
     });
 
     it('index.html 始终取不到时启用兜底首页，且引用 Common/js/index.js 与 Common/css/index.css', async () => {
         stubExtension((p) => (p === 'viewer/index.html' ? null : 'content-of:' + p));
-        const { writer, zip } = makeWriter();
+        const { writer, disk } = makeWriter();
 
         const result = await exportViewerWithVerify(writer, { uin: 10001, nickname: '张三' });
 
@@ -139,8 +167,8 @@ describe('备份查看器生成', () => {
         // 兜底后关键文件齐备，查看器仍可打开
         expect(result.ok).toBe(true);
 
-        const entry = zip.getEntries().find((e) => e.path === ROOT + '/index.html');
-        const html = String(entry?.data);
+        const entry = entries(disk).find(([p]) => p === ROOT + '/index.html');
+        const html = String(entry?.[1]);
         expect(html).toContain('./Common/js/index.js');
         expect(html).toContain('./Common/css/index.css');
         expect(html).toContain('张三');
@@ -163,12 +191,12 @@ describe('备份查看器生成', () => {
 
     it('exportOthers 在写出个人档与配置的同时生成查看器', async () => {
         stubExtension((p) => 'content-of:' + p);
-        const { writer, zip } = makeWriter();
+        const { writer, disk } = makeWriter();
 
         const result = await exportOthers(writer, { uin: 10001 }, { Common: { exportType: 'HTML' } });
 
         expect(result.ok).toBe(true);
-        const written = paths(zip);
+        const written = paths(disk);
         expect(written).toContain('Common/json/user.js');
         expect(written).toContain('Common/json/user.json');
         expect(written).toContain('Common/json/config.js');
@@ -187,7 +215,7 @@ describe('备份查看器生成', () => {
 
     it('exportBackupHistory 写出纯 JSON 增量备份文件并按模块顺序排序', async () => {
         stubExtension((p) => 'content-of:' + p);
-        const { writer, zip } = makeWriter();
+        const { writer, disk } = makeWriter();
 
         const rows: ModuleBackupRow[] = [
             { module: 'Photos', data: [{ id: 1 }], time: 300 },
@@ -196,9 +224,9 @@ describe('备份查看器生成', () => {
         await exportBackupHistory(writer, rows, 10001);
 
         const path = ROOT + '/Common/json/助手备份数据_10001.json';
-        expect(paths(zip)).toContain('Common/json/助手备份数据_10001.json');
-        const entry = zip.getEntries().find((e) => e.path === path);
-        const payload = JSON.parse(String(entry?.data));
+        expect(paths(disk)).toContain('Common/json/助手备份数据_10001.json');
+        const entry = entries(disk).find(([p]) => p === path);
+        const payload = JSON.parse(String(entry?.[1]));
         // 纯 JSON（无 window.xxx = 前缀），且只含当前 uin；按模块顺序排序
         expect(payload).toEqual({ Backedup: { '10001': [rows[1], rows[0]] } });
         // 复刻 V2 顺序：Messages 先于 Photos
@@ -207,7 +235,7 @@ describe('备份查看器生成', () => {
 
     it('exportOthers 接收增量行后一并写出增量 JSON（与 user/config/查看器共存）', async () => {
         stubExtension((p) => 'content-of:' + p);
-        const { writer, zip } = makeWriter();
+        const { writer, disk } = makeWriter();
 
         const rows: ModuleBackupRow[] = [{ module: 'Blogs', data: [], time: 1 }];
         const result = await exportOthers(
@@ -220,7 +248,7 @@ describe('备份查看器生成', () => {
         );
 
         expect(result.ok).toBe(true);
-        const written = paths(zip);
+        const written = paths(disk);
         expect(written).toContain('Common/json/user.js');
         expect(written).toContain('Common/json/user.json');
         expect(written).toContain('Common/json/config.js');
@@ -229,10 +257,10 @@ describe('备份查看器生成', () => {
 
     it('未传增量行时 exportOthers 不写出增量 JSON', async () => {
         stubExtension((p) => 'content-of:' + p);
-        const { writer, zip } = makeWriter();
+        const { writer, disk } = makeWriter();
 
         await exportOthers(writer, { uin: 10001 }, { Common: { exportType: 'HTML' } });
 
-        expect(paths(zip).some((p) => p.startsWith('Common/json/助手备份数据_'))).toBe(false);
+        expect(paths(disk).some((p) => p.startsWith('Common/json/助手备份数据_'))).toBe(false);
     });
 });

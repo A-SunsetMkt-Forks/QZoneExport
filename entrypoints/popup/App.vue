@@ -20,6 +20,7 @@ import {
     PRIVATE_MODULES,
     DEFAULT_MEDIA_MODE,
     DEFAULT_DOWNLOAD_TYPE,
+    defaultDownloadTypeFor,
     DEFAULT_EXPORT_TYPE,
     mediaSummaryText,
 } from '../../core/shared/backup-options';
@@ -75,7 +76,7 @@ const albumFilter = ref('');
 const albumSearchRef = ref<HTMLInputElement | null>(null);
 const diariesEncrypted = ref(false);
 // 初值用共享默认值，避免首次安装（sync 无配置）时 popup 与配置页默认值对不上
-const downloadType = ref(DEFAULT_DOWNLOAD_TYPE);
+const downloadType = ref(defaultDownloadTypeFor(import.meta.env.FIREFOX));
 const mediaMode = ref(DEFAULT_MEDIA_MODE);
 const exportText = ref(DEFAULT_EXPORT_TYPE);
 const starting = ref(false);
@@ -300,6 +301,9 @@ onMounted(async () => {
             let dt = config?.Common?.downloadType || DEFAULT_DOWNLOAD_TYPE;
             if (dt === 'File') {
                 dt = 'Browser'; // File（助手内部）模式已淘汰，历史配置归一化
+            }
+            if (import.meta.env.FIREFOX && dt === 'Disk') {
+                dt = 'Browser'; // Firefox 形态 B：直写目录不可用
             }
             downloadType.value = dt;
             mediaMode.value = config?.Common?.mediaMode || DEFAULT_MEDIA_MODE;

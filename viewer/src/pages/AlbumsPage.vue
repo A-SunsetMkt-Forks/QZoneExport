@@ -11,7 +11,7 @@ import ListPage from '../components/ListPage.vue';
 import MediaGrid from '../components/MediaGrid.vue';
 import ThatYearToday from '../components/ThatYearToday.vue';
 import PhotoBatchItem from '../components/items/PhotoBatchItem.vue';
-import { photoLocation, photoMediaOf, photoShootTime, photoTimeOf, photoUploadTime, type MediaItem } from '../data/media';
+import { photoLocation, photoMediaOf, photoTimeOf, resolvePhotoTime, type MediaItem } from '../data/media';
 import { useGridColumns } from '../data/gridColumns';
 import { getModulePref, savePref, type AlbumView } from '../data/displayPrefs';
 
@@ -115,8 +115,8 @@ function coverUrl(album: Record<string, any>): string {
 
 /** 相片排序字段：上传时间（默认）/ 拍摄时间（兜底上传）/ 点赞 / 评论，均可升降序 */
 const photoSorts = [
-    { label: '上传时间', value: 'upload', valueOf: (p: Record<string, any>) => timeValue(photoUploadTime(p)) },
-    { label: '拍摄时间', value: 'shoot', valueOf: (p: Record<string, any>) => timeValue(photoShootTime(p) || photoUploadTime(p)) },
+    { label: '上传时间', value: 'upload', valueOf: (p: Record<string, any>) => timeValue(resolvePhotoTime(p, 'upload')) },
+    { label: '拍摄时间', value: 'shoot', valueOf: (p: Record<string, any>) => timeValue(resolvePhotoTime(p, 'shoot')) },
     { label: '点赞数', value: 'like', valueOf: (p: Record<string, any>) => likeTotal(p) },
     { label: '评论数', value: 'comment', valueOf: (p: Record<string, any>) => itemComments(p).length },
 ];
@@ -185,7 +185,7 @@ function accessTag(album: Record<string, any>): string {
                 <!-- 那年今日：相册本身不算，只算本册相片（按相片上传时间） -->
                 <that-year-today
                     :items="current.photoList || []"
-                    :time-of="(photo: Record<string, any>) => photo.uploadTime || photo.uploadtime"
+                    :time-of="(photo: Record<string, any>) => resolvePhotoTime(photo, 'upload')"
                 >
                     <template #item="{ item }">
                         <photo-batch-item :album="current" :photos="[item]" />
